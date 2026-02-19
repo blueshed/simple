@@ -19,7 +19,7 @@ These files are owned by the upstream template. The user's app code (`server.ts`
 For each managed file:
 
 1. Fetch the upstream version:
-   `https://raw.githubusercontent.com/blueshed/simple/refs/heads/main/template/<file>`
+   `https://raw.githubusercontent.com/blueshed/simple/refs/heads/main/<file>`
 
 2. Read the local version with the Read tool.
 

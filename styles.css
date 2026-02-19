@@ -184,9 +184,9 @@ pre {
     color: var(--fg-muted);
 }
 
-/* === m-theme === */
+/* === app-theme === */
 
-m-theme {
+app-theme {
     display: contents;
 }
 
@@ -215,38 +215,38 @@ m-theme {
     background: var(--secondary-hover);
 }
 
-/* === m-login === */
+/* === app-login === */
 
-m-login label + label {
+app-login label + label {
     margin-top: var(--space-sm);
 }
 
-m-login button {
+app-login button {
     margin-top: var(--space-md);
 }
 
-m-login .error {
+app-login .error {
     display: inline-block;
     margin-left: var(--space-md);
     font-size: var(--font-size-sm);
     color: var(--danger);
 }
 
-/* === m-home === */
+/* === app-home === */
 
-m-home .connection-bar {
+app-home .connection-bar {
     display: flex;
     align-items: center;
     gap: var(--space-md);
     margin-bottom: var(--space-sm);
 }
 
-m-home .status {
+app-home .status {
     font-size: var(--font-size-sm);
     color: var(--fg-muted);
 }
 
-m-home .logout {
+app-home .logout {
     margin-left: auto;
     padding: 0.25rem 0.75rem;
     font-size: 0.8rem;
@@ -254,7 +254,7 @@ m-home .logout {
     border-color: var(--surface-border);
 }
 
-m-home .profile {
+app-home .profile {
     font-size: var(--font-size-legend);
     background: none;
     border: none;
@@ -263,7 +263,7 @@ m-home .profile {
     min-height: 0;
 }
 
-m-home .doc-go,
-m-home .mut-go {
+app-home .doc-go,
+app-home .mut-go {
     margin-top: var(--space-md);
 }

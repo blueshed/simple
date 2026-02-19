@@ -6,16 +6,9 @@ import { connect } from "../session";
 import { effect } from "../signals";
 
 class AppHome extends HTMLElement {
-  async connectedCallback() {
+  connectedCallback() {
     const token = this.getAttribute("token")!;
-    const { api, profile, openDoc } = await connect(token);
-
-    // Render profile once available
-    effect(() => {
-      const p = profile.value as any;
-      if (!p) return;
-      this.querySelector("#welcome")!.textContent = `Hello, ${p.profile.name}`;
-    });
+    const { api, profile, openDoc } = connect(token);
 
     this.innerHTML = `
       <p id="welcome">Connecting…</p>
@@ -24,10 +17,18 @@ class AppHome extends HTMLElement {
       -->
     `;
 
+    // Render profile once available
+    effect(() => {
+      const p = profile.get() as any;
+      if (!p) return;
+      this.querySelector("#welcome")!.textContent = `Hello, ${p.profile.name}`;
+    });
+
     // Example: open a document and react to it
-    // const doc = await openDoc("thing_doc", thingId);
+    // const thingId = 1;
+    // const doc = openDoc("thing_doc", thingId, null);
     // effect(() => {
-    //   const data = doc.value as any;
+    //   const data = doc.get() as any;
     //   if (!data) return;
     //   this.querySelector("#content")!.textContent = JSON.stringify(data.thing);
     // });
