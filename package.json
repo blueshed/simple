@@ -4,7 +4,8 @@
     "up":     "docker compose up -d --wait",
     "down":   "docker compose down -v",
     "db":     "bun run down && bun run up",
-    "dev":    "bun --watch server.ts"
+    "dev":    "bun --watch server.ts",
+    "api":    "bun run cli.ts"
   },
   "dependencies": {
     "postgres": "^3.4.8"

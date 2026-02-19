@@ -52,6 +52,7 @@ Client                    Server                  Postgres
 | `styles.css` | CSS tokens — customise colours/fonts |
 | `components/app-login.ts` | Login/register form — adapt to your register() signature |
 | `components/app-home.ts` | Authenticated shell — add your doc calls and UI |
+| `cli.ts` | Generic DB function caller — `bun run api <fn> [args]` |
 | `init_db/00_extensions.sql` | Token crypto — update database name |
 | `init_db/01_schema.sql` | Auth tables + your domain tables |
 | `init_db/02_auth.sql` | Auth functions — **do not edit** unless you need custom auth |
