@@ -15,6 +15,7 @@ if (name === "myapp") {
 const files = [
   { path: "compose.yml",                  from: /myapp/g },
   { path: "init_db/00_extensions.sql",    from: /myapp/g },
+  { path: "session.ts",                   from: /myapp/g },
 ];
 
 for (const { path, from } of files) {

@@ -133,8 +133,8 @@ export function connect(token: string) {
 
 export type Session = ReturnType<typeof connect>;
 
-// Token key namespaced by app name (document.title is set by setup.ts)
-export const TOKEN_KEY = `${document.title.toLowerCase()}:token`;
+// Token key namespaced by app name (substituted by setup.ts)
+export const TOKEN_KEY = "myapp:token";
 
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
