@@ -1,10 +1,7 @@
 import postgres from "postgres";
-import pkg from "./package.json";
+import { database_url } from "./server-core";
 
-const sql = postgres(
-  process.env.DATABASE_URL ??
-  `postgres://postgres:secret@localhost:5432/${pkg.name}`,
-);
+const sql = postgres(database_url);
 const [fn, ...args] = process.argv.slice(2);
 
 if (!fn || fn === "-h" || fn === "--help") {

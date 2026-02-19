@@ -2,6 +2,10 @@ import postgres from "postgres";
 import type { ServerWebSocket } from "bun";
 import pkg from "./package.json";
 
+export const database_url =
+  process.env.DATABASE_URL ??
+  `postgres://postgres:secret@localhost:5432/${pkg.name}`;
+
 type WS = ServerWebSocket<{ user_id: number; docs: Set<string> }>;
 
 export function createServer(config: {
@@ -11,11 +15,7 @@ export function createServer(config: {
   port?: number;
   databaseUrl?: string;
 }) {
-  const sql = postgres(
-    config.databaseUrl ??
-    process.env.DATABASE_URL ??
-    `postgres://postgres:secret@localhost:5432/${pkg.name}`,
-  );
+  const sql = postgres(config.databaseUrl ?? database_url);
   const clients: WS[] = [];
   const preAuth = new Set(config.preAuth);
 

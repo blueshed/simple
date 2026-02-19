@@ -67,7 +67,14 @@ No response. The server tracks `"${fn}:${args[0]}"` in `ws.data.docs`.
 ### Push Events
 
 ```json
-{ "type": "notify", "fn": "save_thing", "op": "upsert", "doc": "thing_doc", "doc_id": 1, "collection": "things", "parent_id": null, "data": { ... } }
+{ "type": "notify", "fn": "save_thing", "op": "upsert", "doc": "thing_doc", "doc_id": 1, "collection": "things", "data": { ... } }
+```
+
+For nested collections the payload also carries `parent_ids` — an array of ancestor ids,
+one per intermediate path segment:
+
+```json
+{ "type": "notify", ..., "collection": "things.items", "parent_ids": [42], "data": { ... } }
 ```
 
 ## Notification Fan-Out
@@ -77,7 +84,7 @@ sql.listen("change", (payload) => {
   const { targets, ...rest } = JSON.parse(payload);
   for (const target of targets ?? []) {
     const key = `${target.doc}:${target.doc_id}`;
-    const msg = JSON.stringify({ type: "notify", ...target, parent_id: target.parent_id ?? null, ...rest });
+    const msg = JSON.stringify({ type: "notify", ...target, ...rest });
     for (const ws of clients) {
       if (ws.data.docs.has(key)) ws.send(msg);
     }

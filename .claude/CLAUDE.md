@@ -40,7 +40,8 @@ PERFORM pg_notify('change', jsonb_build_object(
     'data',    row_to_json(v_row)::jsonb,   -- or jsonb_build_object('id', v_id) for remove
     'targets', jsonb_build_array(
         jsonb_build_object('doc', 'thing_doc', 'collection', 'things', 'doc_id', v_parent_id)
-        -- for nested: add 'parent_id', v_parent_id and use 'collection', 'parent.children'
+        -- for nested: add 'parent_ids', jsonb_build_array(v_parent_id) and use 'collection', 'parent.children'
+        -- for deeper nesting: 'parent_ids', jsonb_build_array(v_grandparent_id, v_parent_id)
     )
 )::text);
 ```

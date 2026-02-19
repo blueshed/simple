@@ -81,14 +81,24 @@ PERFORM pg_notify('change', jsonb_build_object(
 )::text);
 ```
 
-For nested collections, use a dotted path and include `parent_id`:
+For nested collections, use a dotted path and include `parent_ids` — an array with one
+ancestor id per intermediate segment (all but the last):
 
 ```sql
+-- two-level: things.items — one intermediate segment
 jsonb_build_object(
     'doc',        'thing_doc',
     'collection', 'things.items',
     'doc_id',     v_thing_doc_id,
-    'parent_id',  v_thing_id
+    'parent_ids', jsonb_build_array(v_thing_id)
+)
+
+-- three-level: things.items.parts — two intermediate segments
+jsonb_build_object(
+    'doc',        'thing_doc',
+    'collection', 'things.items.parts',
+    'doc_id',     v_thing_doc_id,
+    'parent_ids', jsonb_build_array(v_thing_id, v_item_id)
 )
 ```
 

@@ -65,7 +65,7 @@ When a `notify` event arrives, `merge()` routes it to the matching signal:
 1. Look up `"${doc}:${doc_id}"` — skip if not open
 2. `collection === null` — root entity changed: spread new fields onto root
 3. `collection = "things"` — find item in array by `id`, splice or upsert
-4. `collection = "parent.children"` — navigate to parent via `parent_id`, then splice or upsert in nested array
+4. `collection = "a.b.c"` — walk each intermediate segment using `parent_ids[i]`, then splice or upsert in the final array. `parent_ids` has one entry per intermediate segment (all but the last).
 
 No re-fetch needed — the notify payload carries the row (or `{ id }` for removes).
 

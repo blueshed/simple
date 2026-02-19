@@ -61,7 +61,7 @@ export function connect(token: string) {
   }
 
   function merge(msg: ServerEvent) {
-    const { doc, doc_id, collection, parent_id, op, data } = msg as any;
+    const { doc, doc_id, collection, parent_ids, op, data } = msg as any;
     const key = `${doc}:${doc_id}`;
     const s = docs.get(key);
     if (!s || !data) return;
@@ -77,22 +77,26 @@ export function connect(token: string) {
       return;
     }
 
-    // collection may be a dotted path e.g. "packages.allocations"
-    // parent_id identifies the item in the first segment that owns the nested array
-    const [segment, nested] = collection.split(".");
+    // collection is a dotted path e.g. "packages.allocations.options"
+    // parent_ids is an array with one id per intermediate segment (all but the last)
+    const segments = collection.split(".");
 
-    if (!nested) {
-      // single-level collection
-      const arr = root?.[segment] as any[];
+    if (segments.length === 1) {
+      // single-level collection — no parent traversal needed
+      const arr = root?.[segments[0]] as any[];
       if (!arr) return;
       splice(arr, data, op);
     } else {
-      // two-level path: find parent in segment[], then upsert/remove in its nested[]
-      const parentArr = root?.[segment] as any[];
-      if (!parentArr) return;
-      const parent = parentArr.find((item: any) => item.id === parent_id);
-      if (!parent) return;
-      const arr = parent[nested] as any[];
+      // walk each intermediate segment using the corresponding parent_id
+      const ids: number[] = parent_ids ?? [];
+      let node: any = root;
+      for (let i = 0; i < segments.length - 1; i++) {
+        const arr = node?.[segments[i]] as any[];
+        if (!arr) return;
+        node = arr.find((item: any) => item.id === ids[i]);
+        if (!node) return;
+      }
+      const arr = node?.[segments[segments.length - 1]] as any[];
       if (!arr) return;
       splice(arr, data, op);
     }
