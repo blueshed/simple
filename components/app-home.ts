@@ -4,6 +4,7 @@
 
 import { connect } from "../session";
 import { effect } from "../signals";
+import { TOKEN_KEY } from "../token-key";
 
 class AppHome extends HTMLElement {
   connectedCallback() {
@@ -19,7 +20,7 @@ class AppHome extends HTMLElement {
     `;
 
     this.querySelector("#logout")!.addEventListener("click", () => {
-      sessionStorage.removeItem("token");
+      sessionStorage.removeItem(TOKEN_KEY);
       location.hash = "/";
     });
 
