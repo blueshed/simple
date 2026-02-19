@@ -2,9 +2,8 @@
 // Opens a WebSocket session, exposes the api proxy and profile signal.
 // Replace the body with your own doc calls and UI.
 
-import { connect } from "../session";
+import { connect, logout } from "../session";
 import { effect } from "../signals";
-import { TOKEN_KEY } from "../token-key";
 
 class AppHome extends HTMLElement {
   connectedCallback() {
@@ -19,10 +18,7 @@ class AppHome extends HTMLElement {
       <!-- Add your UI here. -->
     `;
 
-    this.querySelector("#logout")!.addEventListener("click", () => {
-      sessionStorage.removeItem(TOKEN_KEY);
-      location.hash = "/";
-    });
+    this.querySelector("#logout")!.addEventListener("click", logout);
 
     // Render profile once available
     effect(() => {

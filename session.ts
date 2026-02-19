@@ -133,6 +133,13 @@ export function connect(token: string) {
 
 export type Session = ReturnType<typeof connect>;
 
+// Token key namespaced by app name (document.title is set by setup.ts)
+export const TOKEN_KEY = `${document.title.toLowerCase()}:token`;
+
+export function getToken(): string | null {
+  return sessionStorage.getItem(TOKEN_KEY);
+}
+
 export async function auth(
   fn: string,
   args: unknown[],
@@ -144,5 +151,11 @@ export async function auth(
   });
   const body = await res.json();
   if (!body.ok) throw new Error(body.error);
+  sessionStorage.setItem(TOKEN_KEY, body.data.token);
   return { token: body.data.token, profile: body.data.profile };
+}
+
+export function logout(): void {
+  sessionStorage.removeItem(TOKEN_KEY);
+  location.hash = "/";
 }

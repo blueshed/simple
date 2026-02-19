@@ -1,7 +1,7 @@
 // app-login — handles pre-auth: register and login.
 // Fires a CustomEvent("authenticated") when the user has a token.
 
-import { TOKEN_KEY } from "../token-key";
+import { auth } from "../session";
 
 class AppLogin extends HTMLElement {
   connectedCallback() {
@@ -53,14 +53,7 @@ class AppLogin extends HTMLElement {
     const errEl = this.querySelector("#error")!;
     errEl.textContent = "";
     try {
-      const res = await fetch("/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fn, args }),
-      });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error);
-      sessionStorage.setItem(TOKEN_KEY, json.data.token);
+      await auth(fn, args);
       this.dispatchEvent(new CustomEvent("authenticated", { bubbles: true }));
     } catch (e: any) {
       errEl.textContent = e.message;

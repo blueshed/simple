@@ -1,12 +1,12 @@
 import { routes } from "./signals";
-import { TOKEN_KEY } from "./token-key";
+import { getToken } from "./session";
 import "./components/app-login";
 import "./components/app-home";
 
 const app = document.getElementById("app")!;
 
 // Restore session from stored token
-if (sessionStorage.getItem(TOKEN_KEY)) location.hash = "/home";
+if (getToken()) location.hash = "/home";
 
 routes(app, {
   "/": () => {
@@ -17,7 +17,7 @@ routes(app, {
     });
   },
   "/home": () => {
-    const token = sessionStorage.getItem(TOKEN_KEY);
+    const token = getToken();
     if (!token) {
       location.hash = "/";
       return;
