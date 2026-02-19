@@ -4,9 +4,23 @@ Zero-dependency browser client. No framework, no bundler — Bun serves TypeScri
 
 ## Session (`session.ts`)
 
+### Auth Lifecycle
+
+```typescript
+import { auth, getToken, logout, TOKEN_KEY } from "./session";
+
+// TOKEN_KEY — namespaced sessionStorage key (e.g. "myapp:token", substituted by setup.ts)
+
+await auth("login", [email, password]);   // POST /auth, stores token in sessionStorage
+await auth("register", [name, email, pw]); // same for register
+
+getToken();   // returns stored token or null
+logout();     // clears token, navigates to "/"
+```
+
 ### `auth(fn, args)`
 
-HTTP POST to `/auth` for pre-auth calls (login, register). Returns the server response data.
+HTTP POST to `/auth` for pre-auth calls (login, register). Stores the token in `sessionStorage` and returns `{ token, profile }`.
 
 ### `connect(token)`
 
@@ -119,13 +133,15 @@ Pattern:
 class MyComponent extends HTMLElement {
   private disposers: (() => void)[] = [];
 
-  async connectedCallback() {
-    const { api, profile, openDoc } = await connect(this.getAttribute("token")!);
-    const doc = openDoc("thing_doc", 1, await api.thing_doc(1));
+  connectedCallback() {
+    const { api, profile, openDoc } = connect(this.getAttribute("token")!);
+
+    this.innerHTML = `<p id="name">Connecting…</p>`;
 
     this.disposers.push(effect(() => {
-      const d = doc.get() as any;
-      this.innerHTML = `<p>${d?.thing?.name}</p>`;
+      const p = profile.get() as any;
+      if (!p) return;
+      this.querySelector("#name")!.textContent = p.profile.name;
     }));
   }
 
