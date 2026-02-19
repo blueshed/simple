@@ -11,11 +11,17 @@ class AppHome extends HTMLElement {
     const { api, profile, openDoc } = connect(token);
 
     this.innerHTML = `
-      <p id="welcome">Connecting…</p>
-      <!-- Add your UI here. Example:
-      <button id="load">Load my thing</button>
-      -->
+      <div class="connection-bar">
+        <span id="welcome">Connecting…</span>
+        <button id="logout" class="logout">Sign out</button>
+      </div>
+      <!-- Add your UI here. -->
     `;
+
+    this.querySelector("#logout")!.addEventListener("click", () => {
+      sessionStorage.removeItem("token");
+      location.hash = "/";
+    });
 
     // Render profile once available
     effect(() => {
