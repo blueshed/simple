@@ -13,6 +13,7 @@
     "@types/bun": "^1.3.9"
   },
   "bun-create": {
-    "postinstall": "bun setup.ts"
+    "postinstall": "bun setup.ts",
+    "start": "bun run db && bun run dev"
   }
 }
