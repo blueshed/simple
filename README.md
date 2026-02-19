@@ -53,7 +53,7 @@ Client                    Server                  Postgres
 | `components/app-login.ts` | Login/register form — adapt to your register() signature |
 | `components/app-home.ts` | Authenticated shell — add your doc calls and UI |
 | `cli.ts` | Generic DB function caller — `bun run api <fn> [args]` |
-| `setup.ts` | Post-create substitution — runs once, safe to delete |
+| `setup.ts` | Post-create substitution — runs once then self-deletes |
 | `init_db/00_extensions.sql` | Token crypto — update database name |
 | `init_db/01_schema.sql` | Auth tables + your domain tables |
 | `init_db/02_auth.sql` | Auth functions — **do not edit** unless you need custom auth |

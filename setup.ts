@@ -1,7 +1,7 @@
 // Runs once after `bun create` copies the template.
 // Replaces the placeholder "myapp" with the actual project name.
 
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync } from "fs";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const name = pkg.name as string; // bun create sets this to basename(destination)
@@ -32,6 +32,10 @@ const title = name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const html = readFileSync("index.html", "utf8");
 writeFileSync("index.html", html.replace("My App", title));
 console.log(`✓ index.html  (title → "${title}")`);
+
+// Self-delete — this script is only needed once after bun create
+unlinkSync("setup.ts");
+console.log(`✓ setup.ts  (deleted)`);
 
 console.log(`\nReady. Next steps:`);
 console.log(`  bun run db   # start postgres`);
