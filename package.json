@@ -1,0 +1,6 @@
+{
+  "name": "simple",
+  "version": "0.1.0",
+  "description": "A minimal full-stack pattern: postgres owns everything, the server routes, the client merges.",
+  "private": true
+}

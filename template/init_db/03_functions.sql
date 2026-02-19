@@ -1,0 +1,57 @@
+-- Domain doc functions and mutations go here.
+--
+-- Convention:
+--   <name>_doc(p_user_id INT, p_id INT) -> JSONB
+--     Returns a full document for a client to open. Permission-checked.
+--     Shape: { "<name>": { id, ...fields, <collection>: [...] } }
+--
+--   save_<entity>(p_user_id INT, ...) -> JSONB
+--     Upserts an entity. Emits pg_notify('change', ...) with targets.
+--     Returns the saved row as JSONB.
+--
+--   remove_<entity>(p_user_id INT, p_id INT) -> JSONB
+--     Deletes an entity. Emits pg_notify('change', ...) with targets.
+--     Returns the deleted id as JSONB.
+--
+-- Notify payload shape:
+--   {
+--     "fn":      "save_thing",
+--     "op":      "upsert" | "remove",
+--     "data":    <row as jsonb> | { "id": <id> },
+--     "targets": [{ "doc": "thing_doc", "collection": "things", "doc_id": <id> }]
+--   }
+--
+-- For nested collections (e.g. items inside a thing), use dotted path:
+--   "collection": "things.items", with "parent_id": <thing_id>
+--
+-- Example — replace "thing" with your entity:
+
+-- CREATE OR REPLACE FUNCTION thing_doc(p_user_id INT, p_thing_id INT)
+-- RETURNS JSONB LANGUAGE plpgsql AS $$
+-- DECLARE
+--     v_org_id INT;
+--     v_result JSONB;
+-- BEGIN
+--     SELECT organisation_id INTO v_org_id FROM thing WHERE id = p_thing_id;
+--
+--     IF NOT EXISTS (
+--         SELECT 1 FROM membership WHERE user_id = p_user_id AND organisation_id = v_org_id
+--     ) THEN
+--         RAISE EXCEPTION 'not a member';
+--     END IF;
+--
+--     SELECT jsonb_build_object(
+--         'thing', jsonb_build_object(
+--             'id',   t.id,
+--             'name', t.name,
+--             'items', COALESCE((
+--                 SELECT jsonb_agg(row_to_json(i)::jsonb ORDER BY i.id)
+--                 FROM item i WHERE i.thing_id = t.id
+--             ), '[]'::jsonb)
+--         )
+--     ) INTO v_result
+--     FROM thing t WHERE t.id = p_thing_id;
+--
+--     RETURN v_result;
+-- END;
+-- $$;
