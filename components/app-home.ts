@@ -1,14 +1,15 @@
 // app-home — the authenticated shell.
-// Opens a WebSocket session, exposes the api proxy and profile signal.
+// Uses getSession() to access the shared WebSocket session.
 // Replace the body with your own doc calls and UI.
 
-import { connect, logout } from "../session";
+import { getSession, logout } from "../session";
 import { effect } from "../signals";
 
 class AppHome extends HTMLElement {
+  private disposers: (() => void)[] = [];
+
   connectedCallback() {
-    const token = this.getAttribute("token")!;
-    const { api, profile, openDoc } = connect(token);
+    const { api, status, profile, openDoc, closeDoc } = getSession();
 
     this.innerHTML = `
       <div class="connection-bar">
@@ -21,20 +22,27 @@ class AppHome extends HTMLElement {
     this.querySelector("#logout")!.addEventListener("click", logout);
 
     // Render profile once available
-    effect(() => {
+    this.disposers.push(effect(() => {
       const p = profile.get() as any;
       if (!p) return;
       this.querySelector("#welcome")!.textContent = `Hello, ${p.profile.name}`;
-    });
+    }));
 
     // Example: open a document and react to it
     // const thingId = 1;
     // const doc = openDoc("thing_doc", thingId, null);
-    // effect(() => {
+    // this.disposers.push(effect(() => {
     //   const data = doc.get() as any;
     //   if (!data) return;
-    //   this.querySelector("#content")!.textContent = JSON.stringify(data.thing);
-    // });
+    //   if (data._error) { /* handle error */ return; }
+    //   // Patch specific DOM nodes — don't replace innerHTML
+    //   this.querySelector("#name")!.textContent = data.thing_doc.name;
+    // }));
+  }
+
+  disconnectedCallback() {
+    this.disposers.forEach(d => d());
+    this.disposers = [];
   }
 }
 

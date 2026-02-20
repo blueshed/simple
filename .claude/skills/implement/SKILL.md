@@ -9,12 +9,13 @@ Read `spec.md` in the project root and implement the application. The spec is ge
 ## Before you start
 
 1. Read `spec.md` thoroughly. Understand every entity, document, method, and change target.
-2. Read the reference docs for implementation patterns:
+2. Check for a `## Theme` section in `spec.md` — it contains the user's visual style direction (colours, mood, design language). Use it to guide CSS variables and component styling.
+3. Read the reference docs for implementation patterns:
    - `.claude/docs/database.md` — SQL conventions, save/remove pattern, notify payload
    - `.claude/docs/server.md` — WebSocket protocol, preAuth config
    - `.claude/docs/client.md` — session, signals, openDoc, merge, web components
    - `.claude/docs/css.md` — styling conventions
-3. Read the existing app files to understand what's already in place:
+4. Read the existing app files to understand what's already in place:
    - `init_db/01_schema.sql`, `init_db/03_functions.sql`, `server.ts`
    - `components/app-home.ts`, `components/app-login.ts`
 
@@ -99,9 +100,40 @@ jsonb_build_object(
 
 For root entity changes (no path, just `DocName(id)`), use `'collection', null`. Data can be `row_to_json(v_row)::jsonb` — fields are spread onto the existing root.
 
-For collection targets, the data **must match the doc shape** — include nested belongs-to objects and child arrays. Build enriched data: `row_to_json(v_row)::jsonb || jsonb_build_object('author', ..., 'children', ...)`. The merge replaces the entire item in the array by `id`, so missing nested objects will be lost.
+For collection targets, the data **must match the doc shape** — include nested belongs-to objects and child arrays. The merge replaces the entire item in the array by `id`, so missing nested objects will be lost.
 
 For collection documents (doc_id 0, e.g. a global feed), use `'doc_id', 0`.
+
+#### Enriching notify data with helper functions
+
+When a collection document has belongs-to expansions (e.g. a message list where each message has an `author`), every mutation that upserts into that collection must include the nested objects. Extract a **helper function** so the enrichment logic lives in one place:
+
+```sql
+-- Helper: enrich a message row to match the message shape in room_doc
+CREATE OR REPLACE FUNCTION _enrich_message(p_row messages)
+RETURNS JSONB LANGUAGE sql STABLE AS $$
+  SELECT row_to_json(p_row)::jsonb || jsonb_build_object(
+    'author', (SELECT jsonb_build_object('id', u.id, 'name', u.name)
+               FROM "user" u WHERE u.id = p_row.sender_id)
+  );
+$$;
+```
+
+Then every mutation that touches messages calls `_enrich_message(v_row)` instead of duplicating the join:
+
+```sql
+-- In send_message:
+v_data := _enrich_message(v_row);
+PERFORM pg_notify('change', jsonb_build_object(
+    'fn', 'send_message', 'op', 'upsert', 'data', v_data,
+    'targets', jsonb_build_array(...)
+)::text);
+```
+
+**When to create helpers:**
+- If 2+ mutations upsert into the same collection and that collection has belongs-to or nested child expansions
+- Name them `_enrich_<entity>` (the `_` prefix blocks client access)
+- Place them in `init_db/03_functions.sql` before the mutations that use them
 
 ### 4. Seed data (`init_db/04_seed.sql`)
 
@@ -119,17 +151,9 @@ No changes needed unless the spec has pre-auth methods beyond login/register/acc
 
 Refer to `.claude/docs/client.md` for the boot sequence and session singleton.
 
-**Read the existing `app.ts` first.** If it already has the session singleton pattern (`bootSession`, `authRoute`, `sessionReady`), just add new routes — don't rewrite it.
+**Read the existing `app.ts` first.** It already has the session singleton pattern (`bootSession`, `authRoute`, `sessionReady`). Just add new routes — don't rewrite it.
 
-If it still uses the starter pattern (passing `token` as an attribute, no singleton), upgrade it:
-
-1. Add imports: `signal`, `effect` from `"./signals"`, `initSession`, `clearSession` from `"./session"`
-2. Add `bootSession(token)` and `authRoute(mount)` helpers (see `.claude/docs/client.md` Boot Sequence)
-3. Add token restore: `const existingToken = getToken(); if (existingToken) bootSession(existingToken);`
-4. Wire the login route to call `bootSession(e.detail.token)` then navigate
-5. Wrap authenticated routes with `authRoute()`
-
-Then add a route for each document that needs its own page:
+Add a route for each document that needs its own page:
 
 ```typescript
 "/thing/:id": ({ id }) => authRoute(() => {
@@ -257,7 +281,7 @@ Key rules for components:
 
 Refer to `.claude/docs/css.md` for token conventions and component scoping.
 
-Update CSS variables and add component styles as needed.
+If `spec.md` has a `## Theme` section, use its description to guide colour choices, font selections, border styles, and overall mood. Translate the theme into CSS custom properties and component styles. If no theme section exists, use sensible defaults.
 
 ## Key rules
 

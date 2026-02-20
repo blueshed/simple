@@ -53,8 +53,8 @@ class AppLogin extends HTMLElement {
     const errEl = this.querySelector("#error")!;
     errEl.textContent = "";
     try {
-      await auth(fn, args);
-      this.dispatchEvent(new CustomEvent("authenticated", { bubbles: true }));
+      const { token } = await auth(fn, args);
+      this.dispatchEvent(new CustomEvent("authenticated", { detail: { token }, bubbles: true }));
     } catch (e: any) {
       errEl.textContent = e.message;
     }

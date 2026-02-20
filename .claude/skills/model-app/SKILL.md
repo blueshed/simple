@@ -79,6 +79,18 @@ Always work top-down in this order:
 9. **Checklists** — CAN/DENIED checks that verify permission enforcement (see guidance below)
 10. **Export** — `bun model export-spec` to generate the spec
 
+## Theme and Style
+
+If the user describes a visual style, mood, or theme (e.g. "60s flower power", "dark minimalist", "warm brutalist"), capture it in the model:
+
+```bash
+bun model set-theme "60s flower power — warm oranges, earthy browns, groovy rounded shapes, hand-drawn feel"
+```
+
+The theme is stored in the model database and included in `export-spec` output as a `## Theme` section. The `/implement` skill reads it to guide CSS generation.
+
+If the user doesn't mention a theme, skip this step.
+
 ## Account Entity
 
 Simple's auth system provides a `user` table (id, name, email). In the model, represent this as an **Account** entity — you must add it before referencing it in relations or expansions:

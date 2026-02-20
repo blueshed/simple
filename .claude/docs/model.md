@@ -114,6 +114,16 @@ bun model unlink-story <story_id> <target_type> <target_name>
 
 Target types: `entity`, `document`, `method`.
 
+### Theme
+
+Set a visual style description that gets included in the exported spec. The `/implement` skill reads it to guide CSS generation.
+
+```bash
+bun model set-theme "60s flower power — warm oranges, earthy browns, groovy rounded shapes"
+bun model get-theme
+bun model clear-theme
+```
+
 ### Listing and Export
 
 ```bash

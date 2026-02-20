@@ -1,29 +1,53 @@
-import { routes } from "./signals";
-import { getToken } from "./session";
+import { signal, effect, routes } from "./signals";
+import { initSession, clearSession, getSession, getToken } from "./session";
 import "./components/app-login";
 import "./components/app-home";
 
 const app = document.getElementById("app")!;
 
-// Restore session from stored token
-if (getToken()) location.hash = "/home";
+// --- Session singleton ---
+
+const sessionReady = signal(false);
+
+function bootSession(token: string): void {
+  clearSession();
+  sessionReady.set(false);
+  const session = initSession(token);
+  let fired = false;
+  effect(() => {
+    if (session.profile.get() && !fired) {
+      fired = true;
+      sessionReady.set(true);
+    }
+  });
+}
+
+function authRoute(mount: () => void): void {
+  if (!sessionReady.get()) {
+    if (!getToken()) { location.hash = "/"; return; }
+    app.innerHTML = `<p>Connecting…</p>`;
+    return;
+  }
+  mount();
+}
+
+// Restore session from stored token on reload
+const existingToken = getToken();
+if (existingToken) bootSession(existingToken);
+
+// --- Routes ---
 
 routes(app, {
   "/": () => {
     const el = document.createElement("app-login");
     app.appendChild(el);
-    el.addEventListener("authenticated", () => {
+    el.addEventListener("authenticated", ((e: CustomEvent) => {
+      bootSession(e.detail.token);
       location.hash = "/home";
-    });
+    }) as EventListener);
   },
-  "/home": () => {
-    const token = getToken();
-    if (!token) {
-      location.hash = "/";
-      return;
-    }
+  "/home": () => authRoute(() => {
     const el = document.createElement("app-home");
-    el.setAttribute("token", token);
     app.appendChild(el);
-  },
+  }),
 });

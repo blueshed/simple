@@ -48,6 +48,11 @@ Checklists:
   bun model unconfirm-check <check_id> --api|--ux
   bun model list-checks [checklist]
 
+Theme:
+  bun model set-theme <description>
+  bun model get-theme
+  bun model clear-theme
+
 Listing:
   bun model list
   bun model list-stories
