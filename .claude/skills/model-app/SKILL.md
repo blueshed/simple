@@ -79,17 +79,20 @@ Always work top-down in this order:
 9. **Checklists** — CAN/DENIED checks that verify permission enforcement (see guidance below)
 10. **Export** — `bun model export-spec` to generate the spec
 
-## Theme and Style
+## Metadata
 
-If the user describes a visual style, mood, or theme (e.g. "60s flower power", "dark minimalist", "warm brutalist"), capture it in the model:
+The model database has a key-value metadata store for application-level information. Use it to capture anything that describes the app being built — theme, project name, target audience, etc.
 
 ```bash
-bun model set-theme "60s flower power — warm oranges, earthy browns, groovy rounded shapes, hand-drawn feel"
+bun model set-meta theme "60s flower power — warm oranges, earthy browns, groovy rounded shapes"
+bun model set-meta name "My Chat App"
+bun model get-meta              # list all
+bun model clear-meta name       # remove a key
 ```
 
-The theme is stored in the model database and included in `export-spec` output as a `## Theme` section. The `/implement` skill reads it to guide CSS generation.
+The `set-theme` / `get-theme` / `clear-theme` shortcuts work for the `theme` key specifically.
 
-If the user doesn't mention a theme, skip this step.
+All metadata is included in `export-spec` output as a `## Metadata` section. The `/implement` skill reads the `theme` value (if present) to guide CSS generation. The Easy website displays all metadata on the Stories page.
 
 ## Account Entity
 

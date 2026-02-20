@@ -9,7 +9,7 @@ Read `spec.md` in the project root and implement the application. The spec is ge
 ## Before you start
 
 1. Read `spec.md` thoroughly. Understand every entity, document, method, and change target.
-2. Check for a `## Theme` section in `spec.md` — it contains the user's visual style direction (colours, mood, design language). Use it to guide CSS variables and component styling.
+2. Check for a `## Metadata` section in `spec.md` — look for a **theme** entry which contains the user's visual style direction (colours, mood, design language). Use it to guide CSS variables and component styling.
 3. Read the reference docs for implementation patterns:
    - `.claude/docs/database.md` — SQL conventions, save/remove pattern, notify payload
    - `.claude/docs/server.md` — WebSocket protocol, preAuth config
@@ -281,7 +281,7 @@ Key rules for components:
 
 Refer to `.claude/docs/css.md` for token conventions and component scoping.
 
-If `spec.md` has a `## Theme` section, use its description to guide colour choices, font selections, border styles, and overall mood. Translate the theme into CSS custom properties and component styles. If no theme section exists, use sensible defaults.
+If `spec.md` has a `## Metadata` section with a **theme** entry, use its description to guide colour choices, font selections, border styles, and overall mood. Translate the theme into CSS custom properties and component styles. If no theme entry exists, use sensible defaults.
 
 ## Key rules
 

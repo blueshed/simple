@@ -48,8 +48,11 @@ Checklists:
   bun model unconfirm-check <check_id> --api|--ux
   bun model list-checks [checklist]
 
-Theme:
-  bun model set-theme <description>
+Metadata:
+  bun model set-meta <key> <value>
+  bun model get-meta [key]              (omit key to list all)
+  bun model clear-meta <key>
+  bun model set-theme <description>     (shortcut for set-meta theme ...)
   bun model get-theme
   bun model clear-theme
 
