@@ -10,6 +10,10 @@ Decompose application requirements into [Simple](https://github.com/blueshed/sim
 
 > `bun model` resolves to `docker compose exec easy bun model` via the `model` script in package.json — it runs inside the Easy container.
 
+**Important**:
+- Most CLI args are **positional**, not flags. Use the exact syntax from `reference.md`. Do NOT invent flags like `--actor` — the CLI will reject them.
+- **Run commands individually**, not in batch. Each command should be a separate `bun model` call so you can see errors immediately and fix them before proceeding. Only use `bun model batch` for large bulk imports where you've already verified the syntax.
+
 ## Before you start
 
 Check that the Easy and PlantUML containers are running:

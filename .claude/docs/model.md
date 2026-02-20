@@ -17,12 +17,20 @@ bun model ...  →  bun model export-spec > spec.md  →  /implement
 
 ## CLI Quick Reference
 
+**Important**: Most args are positional, not flags. Don't invent flags like `--actor` — use the exact syntax shown below.
+
 ### Stories
 
 ```bash
 bun model add-story <actor> <action> [description]
 bun model remove-story <id>
 bun model list-stories
+```
+
+Example:
+```bash
+bun model add-story visitor "browse available rooms"
+bun model add-story member "send a message in a room" "Member must have joined the room first"
 ```
 
 ### Entities and Fields
@@ -117,6 +125,8 @@ bun model export-spec > spec.md
 ```
 
 ### Batch
+
+**Prefer individual commands** — run each `bun model` call separately so errors are caught immediately. Only use batch for large bulk imports where you've verified the syntax.
 
 Pipe JSONL to run many commands at once:
 

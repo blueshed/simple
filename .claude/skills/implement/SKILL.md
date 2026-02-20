@@ -157,36 +157,80 @@ For each document, create or update components:
 - **`components/app-home.ts`** — the authenticated shell. Open collection documents, render lists, navigate to detail views.
 - **`components/app-<name>.ts`** — detail components for non-collection documents. Use `openDoc` to subscribe, `effect` to render, `api.save_*` / `api.remove_*` to mutate.
 
-Follow the web component pattern from `.claude/docs/client.md`:
+Follow the web component pattern from `.claude/docs/client.md`. The architecture is designed for **atomic, targeted updates** — never brute-force re-renders:
+
+```
+mutation → pg_notify → merge into signal → effect re-runs → patch specific DOM nodes
+```
+
+#### Component structure
+
+1. **Build the static shell once** in `connectedCallback` — all HTML structure, forms, event listeners
+2. **Effects only patch** — set `.textContent`, toggle classes, append/remove individual nodes
+3. **Never replace innerHTML of a container inside an effect** — it destroys scroll position, focus, input state, and event listeners
+4. **Never re-fetch a document after mutation** — the notify/merge cycle handles it automatically
 
 ```typescript
 import { getSession } from "../session";
 import { effect } from "../signals";
 
-class MyThing extends HTMLElement {
+class AppThing extends HTMLElement {
   private disposers: (() => void)[] = [];
 
   connectedCallback() {
     const id = Number(this.getAttribute("thing-id"));
-    const { api, status, openDoc, closeDoc } = getSession();
+    const { api, status, openDoc } = getSession();
 
-    this.innerHTML = `<div id="content"><p>Loading…</p></div>`;
+    // 1. Static shell — built once, never replaced
+    this.innerHTML = `
+      <header><h1 id="name"></h1></header>
+      <ul id="items"></ul>
+      <form id="add-form"><input name="title" /><button>Add</button></form>
+    `;
 
+    // 2. Event listeners — wired once, not inside effects
+    this.querySelector("#add-form")!.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = this.querySelector<HTMLInputElement>("input[name=title]")!;
+      const title = input.value.trim();
+      if (!title) return;
+      input.value = "";
+      await api.save_item(null, id, title);
+      // No DOM update here — notify/merge handles it
+    });
+
+    // 3. Effects — patch individual nodes, don't replace containers
     const doc = openDoc("thing_doc", id, null);
+    let prevItemIds: number[] = [];
+
     this.disposers.push(effect(() => {
       const d = doc.get() as any;
-      if (!d) return;                    // null until server sends op:"set"
-      if (d._error) {                    // permission denied or other error
-        this.querySelector("#content")!.innerHTML =
-          `<p style="color:var(--danger)">${d._error}</p>`;
+      if (!d) return;
+      if (d._error) {
+        this.querySelector("#name")!.textContent = d._error;
         return;
       }
-      if (d._removed) {                  // root entity was deleted
-        location.hash = "/home";
-        return;
-      }
+      if (d._removed) { location.hash = "/home"; return; }
+
       const thing = d.thing_doc;
-      this.querySelector("#content")!.innerHTML = `<p>${thing.name}</p>`;
+      this.querySelector("#name")!.textContent = thing.name;
+
+      // Reconcile list by id — don't replace innerHTML
+      const ul = this.querySelector("#items")!;
+      const currentIds = (thing.items ?? []).map((i: any) => i.id);
+      for (const id of prevItemIds) {
+        if (!currentIds.includes(id)) ul.querySelector(`[data-id="${id}"]`)?.remove();
+      }
+      for (const item of thing.items ?? []) {
+        let li = ul.querySelector(`[data-id="${item.id}"]`) as HTMLElement | null;
+        if (!li) {
+          li = document.createElement("li");
+          li.setAttribute("data-id", String(item.id));
+          ul.appendChild(li);
+        }
+        li.textContent = item.title;
+      }
+      prevItemIds = currentIds;
     }));
   }
 
@@ -204,7 +248,8 @@ Key rules for components:
 - Always check for `d._error` and `d._removed` before accessing doc fields
 - Always call `closeDoc` in `disconnectedCallback`
 - `openDoc` is safe to call immediately — messages are queued until the WebSocket is open
-- **Separate static UI from reactive effects** — event listeners on buttons/forms should be wired once in `connectedCallback`, not recreated inside effects. Effects should only update the parts of the DOM that change when data changes.
+- **Atomic updates, not brute-force** — effects patch individual DOM nodes (`.textContent`, append, remove). Never set `innerHTML` on a container inside an effect. Never re-fetch a document after calling a mutation.
+- **Reconcile lists by id** — use `data-id` attributes. Add new items, update changed items, remove deleted items. Don't rebuild the list from scratch.
 - **Shared utilities** — if multiple components need the same helper (e.g. HTML escaping, date formatting), extract it into a shared file rather than duplicating it in each component.
 - **Scroll-aware lists** — for chat-like UIs, check if the user is near the bottom before auto-scrolling. Don't force-scroll when the user has scrolled up to read history.
 
@@ -216,6 +261,7 @@ Update CSS variables and add component styles as needed.
 
 ## Key rules
 
+- **Atomic updates** — the whole architecture is `mutation → notify → merge → effect → patch`. Effects must make targeted DOM changes (set textContent, append a node, remove a node). Never replace innerHTML of a container in an effect. Never re-fetch a document after a mutation. The merge cycle delivers the delta — trust it.
 - **KISS** — keep it simple. Don't over-engineer. Write the minimum code that satisfies the spec. Prefer flat over nested, obvious over clever, fewer files over more.
 - **DRY** — don't repeat yourself. If two mutations share the same permission check, extract a helper. If two components render lists the same way, factor out the pattern. If SQL functions share subqueries, use views or CTEs.
 - **Read before writing** — always read existing files before modifying them. Don't duplicate code that already exists. Don't rewrite files that only need a few lines added.

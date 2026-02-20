@@ -221,60 +221,169 @@ route("/thing/:id").get()   // { id: "42" } or null
 
 The `routes()` call wraps all handlers in an `effect`. Any signal read inside a handler (e.g. `sessionReady.get()`) becomes a reactive dependency — the router re-runs automatically when it changes.
 
+## Reactive Update Philosophy
+
+Simple's architecture is designed for **atomic, targeted updates** — not brute-force re-renders:
+
+```
+mutation → pg_notify → merge into signal → effect re-runs → patch specific DOM nodes
+```
+
+When a mutation fires, the server sends only the changed data. The client merges it into the existing document signal (splice one item in an array, spread fields onto the root). The signal triggers effects, which should update **only the DOM nodes that changed**.
+
+### Why this matters
+
+- A user renames a room → the notify carries `{id: 5, name: "New Name"}` → merge spreads it onto the root → the effect updates the `<h1>` text. The message list, the member list, the input form — none of them re-render. They aren't touched.
+- A new message arrives → the notify carries the message object → merge pushes it into the `messages` array → the effect appends one `<div>` to the list. Existing messages stay in the DOM untouched.
+
+### Rules
+
+1. **Never re-fetch after a mutation.** The notify/merge cycle handles it. Calling `closeDoc` + `openDoc` to "refresh" defeats the entire architecture.
+2. **Never replace large DOM trees in effects.** An effect that sets `innerHTML` on a container destroys and recreates every child node — losing scroll position, focus, input state, and event listeners. Instead, patch individual elements: set `.textContent`, toggle classes, append/remove single nodes.
+3. **Build the static shell once** in `connectedCallback`. Wire event listeners once. Effects only touch the parts that change when data changes.
+4. **Use `batch()`** when setting multiple signals — effects run once at the end, not once per signal.
+
 ## Web Components
 
 App code lives in `components/`. Each component is a custom element using `connectedCallback` and `disconnectedCallback` to wire and clean up effects.
 
-Pattern:
+### Pattern: entity document
 
 ```typescript
 import { getSession } from "../session";
 import { effect } from "../signals";
 
-class MyThing extends HTMLElement {
+class AppThing extends HTMLElement {
   private disposers: (() => void)[] = [];
 
   connectedCallback() {
-    const id = Number(this.getAttribute("id"));
+    const id = Number(this.getAttribute("thing-id"));
     const { api, status, openDoc } = getSession();
 
+    // 1. Build the static shell ONCE — elements, forms, event listeners
     this.innerHTML = `
-      <div id="conn-status"></div>
-      <div id="content"><p>Loading…</p></div>
+      <header>
+        <h1 id="name"></h1>
+        <span id="conn-status"></span>
+      </header>
+      <ul id="items"></ul>
+      <form id="add-form"><input name="title" placeholder="New item…" /><button>Add</button></form>
     `;
 
-    // Effect 1: connection status
+    this.querySelector("#add-form")!.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = this.querySelector<HTMLInputElement>("input[name=title]")!;
+      const title = input.value.trim();
+      if (!title) return;
+      input.value = "";
+      await api.save_item(null, id, title);
+      // No DOM update here — the notify/merge cycle handles it
+    });
+
+    // 2. Small, focused effects that patch individual DOM nodes
+
     this.disposers.push(effect(() => {
-      const el = this.querySelector("#conn-status");
-      if (el) el.textContent = status.get() ?? "connected";
+      this.querySelector("#conn-status")!.textContent = status.get() ?? "";
     }));
 
-    // Effect 2: doc render
     const doc = openDoc("thing_doc", id, null);
+
+    // 3. Render effect — update only what changed
+    let prevItemIds: number[] = [];
     this.disposers.push(effect(() => {
       const d = doc.get() as any;
       if (!d) return;
       if (d._error) {
-        this.querySelector("#content")!.innerHTML =
-          `<p style="color:var(--danger)">${d._error}</p>`;
+        this.querySelector("#name")!.textContent = "";
+        this.querySelector("#items")!.innerHTML =
+          `<li style="color:var(--danger)">${d._error}</li>`;
         return;
       }
+      if (d._removed) { location.hash = "/home"; return; }
+
       const thing = d.thing_doc;
-      this.querySelector("#content")!.innerHTML = `<p>${thing.name}</p>`;
+
+      // Patch the name — just set textContent, don't rebuild the header
+      this.querySelector("#name")!.textContent = thing.name;
+
+      // Patch the list — reconcile by id, don't replace innerHTML
+      const ul = this.querySelector("#items")!;
+      const currentIds = (thing.items ?? []).map((i: any) => i.id);
+
+      // Remove items no longer present
+      for (const id of prevItemIds) {
+        if (!currentIds.includes(id)) ul.querySelector(`[data-id="${id}"]`)?.remove();
+      }
+
+      // Add or update items
+      for (const item of thing.items ?? []) {
+        let li = ul.querySelector(`[data-id="${item.id}"]`) as HTMLElement | null;
+        if (!li) {
+          li = document.createElement("li");
+          li.setAttribute("data-id", String(item.id));
+          ul.appendChild(li);
+        }
+        li.textContent = item.title;
+      }
+
+      prevItemIds = currentIds;
     }));
   }
 
   disconnectedCallback() {
     this.disposers.forEach(d => d());
     this.disposers = [];
-    getSession().closeDoc("thing_doc", Number(this.getAttribute("id")));
+    getSession().closeDoc("thing_doc", Number(this.getAttribute("thing-id")));
   }
 }
-customElements.define("my-thing", MyThing);
+customElements.define("app-thing", AppThing);
 ```
 
-Key rules:
+### Pattern: collection document
+
+For list views, the same reconciliation approach applies — append new items, update changed items, remove deleted items:
+
+```typescript
+const doc = openDoc("thing_list", 0, null);
+let prevIds: number[] = [];
+
+this.disposers.push(effect(() => {
+  const d = doc.get() as any;
+  if (!d) return;
+
+  const ul = this.querySelector("#list")!;
+  const items = d.thing_list ?? [];
+  const currentIds = items.map((i: any) => i.id);
+
+  // Remove
+  for (const id of prevIds) {
+    if (!currentIds.includes(id)) ul.querySelector(`[data-id="${id}"]`)?.remove();
+  }
+
+  // Add or update
+  for (const item of items) {
+    let li = ul.querySelector(`[data-id="${item.id}"]`) as HTMLElement | null;
+    if (!li) {
+      li = document.createElement("li");
+      li.setAttribute("data-id", String(item.id));
+      li.innerHTML = `<a></a>`;
+      ul.appendChild(li);
+    }
+    const a = li.querySelector("a")!;
+    if (a.textContent !== item.name) a.textContent = item.name;
+    if (a.getAttribute("href") !== `#/thing/${item.id}`) a.setAttribute("href", `#/thing/${item.id}`);
+  }
+
+  prevIds = currentIds;
+}));
+```
+
+### Key rules
+
 - Always call `getSession()` — never `connect(token)` directly
 - Always handle `!d` (null, pre-arrival) and `d._error` before accessing doc fields
 - Always call `closeDoc` in `disconnectedCallback`
 - `openDoc` is safe to call immediately — messages are queued until WS is open
+- **Never re-fetch a document after mutation** — the notify/merge handles it
+- **Never replace innerHTML of a container in an effect** — patch individual nodes instead
+- **Wire event listeners once** in `connectedCallback`, not inside effects
