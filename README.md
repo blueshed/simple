@@ -74,6 +74,20 @@ PERFORM pg_notify('change', jsonb_build_object(
 )::text);
 ```
 
+## Easy — domain modeling
+
+[Easy](https://github.com/blueshed/easy) is a companion modeling tool that runs as a Docker container.
+Uncomment the `easy` and `plantuml` services in `compose.yml` (or run `/add-easy` in Claude), then:
+
+```bash
+bun run up
+bun model add-entity User ...
+bun model export-spec > spec.md
+# Now run /implement to build from the spec
+```
+
+Browse the model at http://localhost:8080 — stories, entity diagrams, document graphs, checklists.
+
 ## Upgrading infrastructure
 
 ```

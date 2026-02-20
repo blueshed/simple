@@ -7,7 +7,8 @@
     "dev": "bun --watch server.ts",
     "api": "bun run cli.ts",
     "health": "docker compose exec postgres pg_isready -U postgres -d myapp",
-    "logs": "docker compose logs postgres"
+    "logs": "docker compose logs postgres",
+    "model": "docker compose exec easy bun model"
   },
   "dependencies": {
     "postgres": "^3.4.8"
