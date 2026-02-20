@@ -70,7 +70,7 @@ Both follow the same four-step body:
 PERFORM pg_notify('change', jsonb_build_object(
     'fn',      'save_thing',
     'op',      'upsert',                      -- or 'remove'
-    'data',    row_to_json(v_row)::jsonb,     -- or jsonb_build_object('id', v_id) for remove
+    'data',    v_data,                        -- or jsonb_build_object('id', v_id) for remove
     'targets', jsonb_build_array(
         jsonb_build_object(
             'doc',        'thing_doc',
@@ -80,6 +80,14 @@ PERFORM pg_notify('change', jsonb_build_object(
     )
 )::text);
 ```
+
+### Notify data shape
+
+The merge replaces the **entire item** in the collection array by `id`. So the data must match the shape that the document's expansion tree produces — including any nested objects (belongs-to joins, child arrays).
+
+- **Root entity update** (`collection: null`): `row_to_json(v_row)::jsonb` is fine — fields are spread onto the existing root.
+- **Collection item upsert**: build enriched data matching the doc shape. Use `row_to_json(v_row)::jsonb || jsonb_build_object('author', ..., 'children', ...)` to include nested objects the doc function returns.
+- **Remove**: `jsonb_build_object('id', v_id)` — only the id is needed.
 
 For nested collections, use a dotted path and include `parent_ids` — an array with one
 ancestor id per intermediate segment (all but the last):

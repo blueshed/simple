@@ -37,7 +37,7 @@ client that has a matching doc open. The client merges the delta into the open s
 PERFORM pg_notify('change', jsonb_build_object(
     'fn',      'save_thing',
     'op',      'upsert',          -- or 'remove'
-    'data',    row_to_json(v_row)::jsonb,   -- or jsonb_build_object('id', v_id) for remove
+    'data',    v_data,                      -- enriched to match doc shape; jsonb_build_object('id', v_id) for remove
     'targets', jsonb_build_array(
         jsonb_build_object('doc', 'thing_doc', 'collection', 'things', 'doc_id', v_parent_id)
         -- for nested: add 'parent_ids', jsonb_build_array(v_parent_id) and use 'collection', 'parent.children'

@@ -1,10 +1,9 @@
 import postgres from "postgres";
 import type { ServerWebSocket } from "bun";
-import pkg from "./package.json";
 
 export const database_url =
   process.env.DATABASE_URL ??
-  `postgres://postgres:secret@localhost:5432/${pkg.name}`;
+  `postgres://postgres:secret@localhost:5432/myapp`;
 
 type WS = ServerWebSocket<{ user_id: number; docs: Set<string> }>;
 
@@ -32,7 +31,7 @@ export function createServer(config: {
         doc: target.doc,
         doc_id: target.doc_id,
         collection: target.collection,
-        parent_id: target.parent_id ?? null,
+        parent_ids: target.parent_ids ?? null,
         ...rest,
       });
       for (const ws of clients) {
@@ -119,7 +118,32 @@ export function createServer(config: {
 
         // Handle open/close doc subscription messages
         if (msg.type === "open") {
-          ws.data.docs.add(`${msg.fn}:${msg.args?.[0]}`);
+          const docId = msg.args?.[0];
+          ws.data.docs.add(`${msg.fn}:${docId}`);
+          // Call the doc function and send the initial data
+          // doc_id 0 = collection doc (no entity id arg), otherwise pass it
+          const args = docId ? [ws.data.user_id, docId] : [ws.data.user_id];
+          const ph = args.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
+          try {
+            const [row] = await sql.unsafe(
+              `SELECT ${msg.fn}(${ph}) AS result`,
+              args as any[],
+            );
+            ws.send(JSON.stringify({
+              type: "notify",
+              doc: msg.fn,
+              doc_id: docId,
+              op: "set",
+              data: row.result,
+            }));
+          } catch (e: any) {
+            ws.send(JSON.stringify({
+              type: "error",
+              fn: msg.fn,
+              doc_id: docId,
+              error: e.message,
+            }));
+          }
           return;
         }
         if (msg.type === "close") {

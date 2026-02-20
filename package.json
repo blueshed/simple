@@ -1,11 +1,13 @@
 {
   "name": "myapp",
   "scripts": {
-    "up":     "docker compose up -d --wait",
-    "down":   "docker compose down -v",
-    "db":     "bun run down && bun run up",
-    "dev":    "bun --watch server.ts",
-    "api":    "bun run cli.ts"
+    "up": "docker compose up -d --wait",
+    "down": "docker compose down -v",
+    "db": "bun run down && bun run up",
+    "dev": "bun --watch server.ts",
+    "api": "bun run cli.ts",
+    "health": "docker compose exec postgres pg_isready -U postgres -d myapp",
+    "logs": "docker compose logs postgres"
   },
   "dependencies": {
     "postgres": "^3.4.8"

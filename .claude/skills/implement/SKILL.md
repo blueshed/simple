@@ -86,9 +86,11 @@ jsonb_build_object(
 )
 ```
 
-For root entity changes (no path, just `DocName(id)`), use `'collection', null`.
+For root entity changes (no path, just `DocName(id)`), use `'collection', null`. Data can be `row_to_json(v_row)::jsonb` — fields are spread onto the existing root.
 
-For collection documents, the `doc_id` is the entity's own FK to its parent scope (or omit if the collection is global).
+For collection targets, the data **must match the doc shape** — include nested belongs-to objects and child arrays. Build enriched data: `row_to_json(v_row)::jsonb || jsonb_build_object('author', ..., 'children', ...)`. The merge replaces the entire item in the array by `id`, so missing nested objects will be lost.
+
+For collection documents (doc_id 0, e.g. a global feed), use `'doc_id', 0`.
 
 ### 4. Seed data (`init_db/04_seed.sql`)
 
@@ -102,9 +104,78 @@ Refer to `.claude/docs/server.md` for the `createServer` config shape.
 
 No changes needed unless the spec has pre-auth methods beyond login/register/accept_invite.
 
-### 6. Components
+### 6. App entry point (`app.ts`)
 
-Refer to `.claude/docs/client.md` for session API, signals, openDoc/closeDoc, and the web component pattern.
+Refer to `.claude/docs/client.md` for the boot sequence and session singleton.
+
+The app must use the **session singleton** pattern:
+
+```typescript
+import { signal, effect, routes } from "./signals";
+import { initSession, clearSession, getSession, getToken } from "./session";
+
+const app = document.getElementById("app")!;
+const sessionReady = signal(false);
+
+function bootSession(token: string): void {
+  clearSession();
+  sessionReady.set(false);
+  const session = initSession(token);
+  let fired = false;
+  effect(() => {
+    if (session.profile.get() && !fired) {
+      fired = true;
+      sessionReady.set(true);
+    }
+  });
+}
+
+function authRoute(mount: () => void): void {
+  if (!sessionReady.get()) {
+    if (!getToken()) { location.hash = "/"; return; }
+    app.innerHTML = `<p>Connecting…</p>`;
+    return;
+  }
+  mount();
+}
+
+// Restore session from stored token on reload
+const existingToken = getToken();
+if (existingToken) bootSession(existingToken);
+```
+
+Then define routes, using `authRoute` to gate authenticated pages:
+
+```typescript
+routes(app, {
+  "/": () => {
+    const el = document.createElement("app-login");
+    app.appendChild(el);
+    el.addEventListener("authenticated", (e: any) => {
+      bootSession(e.detail.token);
+      location.hash = "/home";
+    });
+  },
+  "/home": () => authRoute(() => {
+    app.appendChild(document.createElement("app-home"));
+  }),
+  "/thing/:id": ({ id }) => authRoute(() => {
+    const el = document.createElement("app-thing");
+    el.setAttribute("thing-id", id);
+    app.appendChild(el);
+  }),
+});
+```
+
+Key points:
+- **One WebSocket per app** — `initSession` creates it, `getSession` returns it from components
+- `bootSession` must be called on login AND on reload (if token exists)
+- `sessionReady` gates routes — because it's read inside the `routes()` effect, the router re-renders automatically when the session becomes ready
+- Components never call `connect()` or `initSession()` — they call `getSession()`
+
+### 7. Components
+
+Refer to `.claude/docs/client.md` for the web component pattern, openDoc/closeDoc, and the `_error` sentinel.
 
 For each document, create or update components:
 
@@ -112,12 +183,50 @@ For each document, create or update components:
 - **`components/app-<name>.ts`** — detail components for non-collection documents. Use `openDoc` to subscribe, `effect` to render, `api.save_*` / `api.remove_*` to mutate.
 
 Follow the web component pattern from `.claude/docs/client.md`:
-- `connectedCallback` — set up effects, open docs
-- `disconnectedCallback` — dispose effects, close docs
-- Use signals for reactive state
-- Use `route("/path/:id")` for parameterized views
 
-### 7. Styles (`styles.css`)
+```typescript
+import { getSession } from "../session";
+import { effect } from "../signals";
+
+class MyThing extends HTMLElement {
+  private disposers: (() => void)[] = [];
+
+  connectedCallback() {
+    const id = Number(this.getAttribute("thing-id"));
+    const { api, status, openDoc, closeDoc } = getSession();
+
+    this.innerHTML = `<div id="content"><p>Loading…</p></div>`;
+
+    const doc = openDoc("thing_doc", id, null);
+    this.disposers.push(effect(() => {
+      const d = doc.get() as any;
+      if (!d) return;                    // null until server sends op:"set"
+      if (d._error) {                    // permission denied or other error
+        this.querySelector("#content")!.innerHTML =
+          `<p style="color:var(--danger)">${d._error}</p>`;
+        return;
+      }
+      const thing = d.thing_doc;
+      this.querySelector("#content")!.innerHTML = `<p>${thing.name}</p>`;
+    }));
+  }
+
+  disconnectedCallback() {
+    this.disposers.forEach(d => d());
+    this.disposers = [];
+    getSession().closeDoc("thing_doc", Number(this.getAttribute("thing-id")));
+  }
+}
+```
+
+Key rules for components:
+- Always use `getSession()` — never `connect(token)` or `initSession()`
+- `openDoc` returns a signal that starts as `null` — always handle the `!d` case
+- Always check for `d._error` before accessing doc fields
+- Always call `closeDoc` in `disconnectedCallback`
+- `openDoc` is safe to call immediately — messages are queued until the WebSocket is open
+
+### 8. Styles (`styles.css`)
 
 Refer to `.claude/docs/css.md` for token conventions and component scoping.
 
@@ -131,7 +240,10 @@ Update CSS variables and add component styles as needed.
 - Every mutation function's first parameter is `p_user_id INT` — the server injects it.
 - Every doc function's first parameter is `p_user_id INT` — even for public docs.
 - Notify targets must exactly match what clients subscribe to via `openDoc`.
-- Use `row_to_json(v_row)::jsonb` for upsert data, `jsonb_build_object('id', v_id)` for remove data.
+- **Notify data must match the doc shape.** For root entity updates (`collection: null`), `row_to_json(v_row)::jsonb` is fine. For collection item upserts, build enriched data with nested objects (e.g. `row_to_json(v_row)::jsonb || jsonb_build_object('author', ..., 'children', ...)`). For removes, use `jsonb_build_object('id', v_id)`.
+- **Session singleton**: components call `getSession()`, never `connect()` or `initSession()`.
+- **Boot sequence**: `app.ts` owns `initSession` and `sessionReady`; routes gate on it via `authRoute`.
+- **openDoc starts null**: the server sends `op: "set"` with the full doc — components must handle `null` and `_error` before accessing fields.
 
 ## Presenting your plan
 

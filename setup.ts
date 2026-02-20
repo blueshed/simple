@@ -13,14 +13,16 @@ if (name === "myapp") {
 }
 
 const files = [
-  { path: "compose.yml",                  from: /myapp/g },
-  { path: "init_db/00_extensions.sql",    from: /myapp/g },
-  { path: "session.ts",                   from: /myapp/g },
+  "compose.yml",
+  "package.json",
+  "server-core.ts",
+  "init_db/00_extensions.sql",
+  "session.ts",
 ];
 
-for (const { path, from } of files) {
+for (const path of files) {
   const before = readFileSync(path, "utf8");
-  const after = before.replace(from, name);
+  const after = before.replace(/myapp/g, name);
   if (before !== after) {
     writeFileSync(path, after);
     console.log(`✓ ${path}`);

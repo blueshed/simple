@@ -12,7 +12,7 @@ createServer({
   profileFn:  string;    // postgres function called on connect: profileFn(user_id)
   index:      Response;  // the HTML bundle to serve at /
   port?:      number;    // default: process.env.PORT || 3000
-  databaseUrl?: string;  // default: DATABASE_URL env, or postgres://postgres:secret@localhost:5432/<pkg.name>
+  databaseUrl?: string;  // default: DATABASE_URL env, or postgres://postgres:secret@localhost:5432/myapp (substituted by setup.ts)
 })
 ```
 
@@ -62,7 +62,22 @@ Client connects to `ws://{host}/ws?token={token}`. The server verifies the token
 { "type": "close", "fn": "thing_doc", "args": [1] }
 ```
 
-No response. The server tracks `"${fn}:${args[0]}"` in `ws.data.docs`.
+On `open`, the server:
+1. Tracks `"${fn}:${args[0]}"` in `ws.data.docs`
+2. Calls the doc function (`fn(user_id)` for collections where `args[0]` is `0`, or `fn(user_id, doc_id)` for entity docs)
+3. Sends the result back as an initial load:
+
+```json
+{ "type": "notify", "doc": "thing_doc", "doc_id": 1, "op": "set", "data": { "thing": { ... } } }
+```
+
+If the doc function raises an error, the server sends an error sentinel instead:
+
+```json
+{ "type": "error", "fn": "thing_doc", "doc_id": 1, "error": "permission denied" }
+```
+
+The client handles `op: "set"` by replacing the signal value directly, and error messages by setting `{ _error: "..." }` on the signal.
 
 ### Push Events
 

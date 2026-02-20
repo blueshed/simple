@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-ALTER DATABASE myapp SET app.token_secret = 'change-me-in-production';
+ALTER DATABASE "myapp" SET app.token_secret = 'change-me-in-production';
 
 -- _make_token(user_id) -> text
 -- Encrypts user_id into an opaque token using pgp_sym_encrypt
