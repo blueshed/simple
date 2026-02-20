@@ -48,6 +48,7 @@ if (!existsSync("model.db")) {
 unlinkSync("setup.ts");
 console.log(`✓ setup.ts  (deleted)`);
 
-console.log(`\nReady. Next steps:`);
+console.log(`\n✨ ${name} created (simple v${pkg.simple})`);
+console.log(`\nNext steps:`);
 console.log(`  bun run up   # start postgres, easy, plantuml`);
 console.log(`  bun run dev  # start server`);
