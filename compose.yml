@@ -16,6 +16,7 @@ services:
       retries: 10
 
   # Uncomment to add Easy (domain modeling tool):
+  # Requires: touch model.db before first start
   # easy:
   #   image: ghcr.io/blueshed/easy:latest
   #   ports:

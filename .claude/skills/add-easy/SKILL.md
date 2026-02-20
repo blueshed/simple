@@ -12,15 +12,17 @@ Add the [Easy](https://github.com/blueshed/easy) domain modeling tool to this Si
 
 1. In `compose.yml`, uncomment the `easy` and `plantuml` services (they are already present as comments)
 
-2. Add `model.db` to `.gitignore` if not already there
+2. Create `model.db` as an empty file: `touch model.db` — this **must** happen before containers start, otherwise Docker creates it as a directory and the SQLite open fails
 
-3. Fetch the modeling skill from the Easy repo and write it into this project:
+3. Add `model.db` to `.gitignore` if not already there
+
+4. Fetch the modeling skill from the Easy repo and write it into this project:
    - Fetch `https://raw.githubusercontent.com/blueshed/easy/refs/heads/main/.claude/skills/model-app/SKILL.md`
      Write to `.claude/skills/model-app/SKILL.md`
    - Fetch `https://raw.githubusercontent.com/blueshed/easy/refs/heads/main/.claude/skills/model-app/reference.md`
      Write to `.claude/skills/model-app/reference.md`
 
-4. Tell the user:
+5. Tell the user:
 
 ```
 Easy is ready. Run:
@@ -48,6 +50,6 @@ The /model-app skill is now available for AI-driven modeling.
 
 - Only uncomment the existing commented-out services — do not add new YAML from scratch
 - Do not start or restart Docker services
-- Do not modify any files other than compose.yml, .gitignore, and the skill files
+- Do not modify any files other than compose.yml, .gitignore, model.db, and the skill files
 - Create the `.claude/skills/model-app/` directory if it doesn't exist
 - Fetch skill files exactly as they are upstream — do not modify their content
