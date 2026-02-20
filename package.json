@@ -9,7 +9,8 @@
     "api": "bun run cli.ts",
     "health": "docker compose exec postgres pg_isready -U postgres -d myapp",
     "logs": "docker compose logs postgres",
-    "model": "docker compose exec easy bun model"
+    "model": "docker compose exec easy bun model",
+    "postinstall": "test -f setup.ts && bun setup.ts || true"
   },
   "dependencies": {
     "postgres": "^3.4.8"
@@ -18,7 +19,6 @@
     "@types/bun": "^1.3.9"
   },
   "bun-create": {
-    "postinstall": "bun setup.ts",
     "start": "bun run db && bun run dev"
   }
 }
