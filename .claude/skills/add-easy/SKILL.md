@@ -1,7 +1,7 @@
 ---
 name: add-easy
 description: Add Easy domain modeling tool to this project. Use when the user says "add easy", "install easy", "add modeling", or wants to design their domain model.
-allowed-tools: Read, Bash, Edit, Write, WebFetch
+allowed-tools: Read, Bash, Edit, Write
 ---
 
 # Add Easy
@@ -16,11 +16,14 @@ Add the [Easy](https://github.com/blueshed/easy) domain modeling tool to this Si
 
 3. Add `model.db` to `.gitignore` if not already there
 
-4. Fetch the modeling skill from the Easy repo and write it into this project:
-   - Fetch `https://raw.githubusercontent.com/blueshed/easy/refs/heads/main/.claude/skills/model-app/SKILL.md`
-     Write to `.claude/skills/model-app/SKILL.md`
-   - Fetch `https://raw.githubusercontent.com/blueshed/easy/refs/heads/main/.claude/skills/model-app/reference.md`
-     Write to `.claude/skills/model-app/reference.md`
+4. Copy the modeling skill from the Easy Docker image into this project:
+   ```bash
+   mkdir -p .claude/skills/model-app
+   docker create --name easy-tmp ghcr.io/blueshed/easy:latest >/dev/null 2>&1
+   docker cp easy-tmp:/app/.claude/skills/model-app/SKILL.md .claude/skills/model-app/SKILL.md
+   docker cp easy-tmp:/app/.claude/skills/model-app/reference.md .claude/skills/model-app/reference.md
+   docker rm easy-tmp >/dev/null 2>&1
+   ```
 
 5. Tell the user:
 
@@ -52,4 +55,4 @@ The /model-app skill is now available for AI-driven modeling.
 - Do not start or restart Docker services
 - Do not modify any files other than compose.yml, .gitignore, model.db, and the skill files
 - Create the `.claude/skills/model-app/` directory if it doesn't exist
-- Fetch skill files exactly as they are upstream — do not modify their content
+- Copy skill files exactly as they are in the image — do not modify their content
