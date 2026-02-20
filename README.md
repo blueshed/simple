@@ -88,16 +88,6 @@ bun model export-spec > spec.md
 Browse the model at http://localhost:8080 — stories, entity diagrams, document graphs, checklists.
 Use `/model-app` in Claude for AI-driven modeling.
 
-## Upgrading infrastructure
-
-```
-/upgrade
-```
-
-A Claude skill that fetches the latest `server-core.ts`, `session.ts`, and `signals.ts` from
-the upstream repo, explains what changed and why, and applies selectively with your approval.
-Your app code is never touched.
-
 ## Docs
 
 - [Server](.claude/docs/server.md) — WebSocket protocol, fan-out, guards
