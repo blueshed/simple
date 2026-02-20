@@ -15,18 +15,16 @@ services:
       timeout: 5s
       retries: 10
 
-  # Uncomment to add Easy (domain modeling tool):
-  # Requires: touch model.db before first start
-  # easy:
-  #   image: ghcr.io/blueshed/easy:latest
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     PLANTUML_URL: http://plantuml:8080
-  #   volumes:
-  #     - ./model.db:/app/model.db
-  #   depends_on:
-  #     - plantuml
-  #
-  # plantuml:
-  #   image: plantuml/plantuml-server:jetty
+  easy:
+    image: ghcr.io/blueshed/easy:latest
+    ports:
+      - "8080:8080"
+    environment:
+      PLANTUML_URL: http://plantuml:8080
+    volumes:
+      - ./model.db:/app/model.db
+    depends_on:
+      - plantuml
+
+  plantuml:
+    image: plantuml/plantuml-server:jetty
