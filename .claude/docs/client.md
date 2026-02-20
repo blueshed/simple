@@ -133,6 +133,11 @@ if (d._error) {
   content.innerHTML = `<p style="color:var(--danger)">${d._error}</p>`;
   return;
 }
+if (d._removed) {
+  // Root entity was deleted — navigate away
+  location.hash = "/home";
+  return;
+}
 const thing = d.thing_doc;
 ```
 

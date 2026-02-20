@@ -105,8 +105,13 @@ export function connect(token: string) {
     const root = current[rootKey] as any;
 
     if (!collection) {
-      // root entity changed — merge fields
-      s.set({ [rootKey]: { ...root, ...data } });
+      if (op === "remove") {
+        // root entity deleted — signal to components to navigate away
+        s.set({ _removed: true });
+      } else {
+        // root entity changed — merge fields
+        s.set({ [rootKey]: { ...root, ...data } });
+      }
       return;
     }
 

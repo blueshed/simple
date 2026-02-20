@@ -62,10 +62,21 @@ For each **method** in the spec, create a postgres function following the four-s
 
 #### Mapping methods to function names
 
-- Methods that create: `save_<entity>` with `p_id INT DEFAULT NULL`
+- Methods that **create and update**: `save_<entity>` with `p_id INT DEFAULT NULL` — INSERT when null, UPDATE when given
+- Methods that **only create** (e.g. sending a message): use the method name directly (e.g. `send_message`) — don't use `save_` with a dummy `p_id`
 - Methods that update fields (publishes): `save_<entity>` with nullable field params
 - Methods that delete: `remove_<entity>`
 - Custom methods: use the method name as the function name (e.g. `publish_post`)
+
+#### Input validation
+
+Validate required text fields in mutation functions. Trim whitespace and reject empty strings:
+
+```sql
+IF TRIM(COALESCE(p_body, '')) = '' THEN
+  RAISE EXCEPTION 'body is required';
+END IF;
+```
 
 #### Mapping change targets to notify
 
@@ -108,63 +119,24 @@ No changes needed unless the spec has pre-auth methods beyond login/register/acc
 
 Refer to `.claude/docs/client.md` for the boot sequence and session singleton.
 
-The app must use the **session singleton** pattern:
+**Read the existing `app.ts` first.** If it already has the session singleton pattern (`bootSession`, `authRoute`, `sessionReady`), just add new routes — don't rewrite it.
+
+If it still uses the starter pattern (passing `token` as an attribute, no singleton), upgrade it:
+
+1. Add imports: `signal`, `effect` from `"./signals"`, `initSession`, `clearSession` from `"./session"`
+2. Add `bootSession(token)` and `authRoute(mount)` helpers (see `.claude/docs/client.md` Boot Sequence)
+3. Add token restore: `const existingToken = getToken(); if (existingToken) bootSession(existingToken);`
+4. Wire the login route to call `bootSession(e.detail.token)` then navigate
+5. Wrap authenticated routes with `authRoute()`
+
+Then add a route for each document that needs its own page:
 
 ```typescript
-import { signal, effect, routes } from "./signals";
-import { initSession, clearSession, getSession, getToken } from "./session";
-
-const app = document.getElementById("app")!;
-const sessionReady = signal(false);
-
-function bootSession(token: string): void {
-  clearSession();
-  sessionReady.set(false);
-  const session = initSession(token);
-  let fired = false;
-  effect(() => {
-    if (session.profile.get() && !fired) {
-      fired = true;
-      sessionReady.set(true);
-    }
-  });
-}
-
-function authRoute(mount: () => void): void {
-  if (!sessionReady.get()) {
-    if (!getToken()) { location.hash = "/"; return; }
-    app.innerHTML = `<p>Connecting…</p>`;
-    return;
-  }
-  mount();
-}
-
-// Restore session from stored token on reload
-const existingToken = getToken();
-if (existingToken) bootSession(existingToken);
-```
-
-Then define routes, using `authRoute` to gate authenticated pages:
-
-```typescript
-routes(app, {
-  "/": () => {
-    const el = document.createElement("app-login");
-    app.appendChild(el);
-    el.addEventListener("authenticated", (e: any) => {
-      bootSession(e.detail.token);
-      location.hash = "/home";
-    });
-  },
-  "/home": () => authRoute(() => {
-    app.appendChild(document.createElement("app-home"));
-  }),
-  "/thing/:id": ({ id }) => authRoute(() => {
-    const el = document.createElement("app-thing");
-    el.setAttribute("thing-id", id);
-    app.appendChild(el);
-  }),
-});
+"/thing/:id": ({ id }) => authRoute(() => {
+  const el = document.createElement("app-thing");
+  el.setAttribute("thing-id", id);
+  app.appendChild(el);
+}),
 ```
 
 Key points:
@@ -172,10 +144,13 @@ Key points:
 - `bootSession` must be called on login AND on reload (if token exists)
 - `sessionReady` gates routes — because it's read inside the `routes()` effect, the router re-renders automatically when the session becomes ready
 - Components never call `connect()` or `initSession()` — they call `getSession()`
+- **Don't import component files that already exist** — only add imports for new components
 
 ### 7. Components
 
 Refer to `.claude/docs/client.md` for the web component pattern, openDoc/closeDoc, and the `_error` sentinel.
+
+**Read the existing components first.** If `app-home.ts` still uses `connect(token)`, update it to use `getSession()` instead — remove the `token` attribute, replace `connect(token)` with `getSession()`.
 
 For each document, create or update components:
 
@@ -206,6 +181,10 @@ class MyThing extends HTMLElement {
           `<p style="color:var(--danger)">${d._error}</p>`;
         return;
       }
+      if (d._removed) {                  // root entity was deleted
+        location.hash = "/home";
+        return;
+      }
       const thing = d.thing_doc;
       this.querySelector("#content")!.innerHTML = `<p>${thing.name}</p>`;
     }));
@@ -222,9 +201,12 @@ class MyThing extends HTMLElement {
 Key rules for components:
 - Always use `getSession()` — never `connect(token)` or `initSession()`
 - `openDoc` returns a signal that starts as `null` — always handle the `!d` case
-- Always check for `d._error` before accessing doc fields
+- Always check for `d._error` and `d._removed` before accessing doc fields
 - Always call `closeDoc` in `disconnectedCallback`
 - `openDoc` is safe to call immediately — messages are queued until the WebSocket is open
+- **Separate static UI from reactive effects** — event listeners on buttons/forms should be wired once in `connectedCallback`, not recreated inside effects. Effects should only update the parts of the DOM that change when data changes.
+- **Shared utilities** — if multiple components need the same helper (e.g. HTML escaping, date formatting), extract it into a shared file rather than duplicating it in each component.
+- **Scroll-aware lists** — for chat-like UIs, check if the user is near the bottom before auto-scrolling. Don't force-scroll when the user has scrolled up to read history.
 
 ### 8. Styles (`styles.css`)
 
@@ -234,6 +216,9 @@ Update CSS variables and add component styles as needed.
 
 ## Key rules
 
+- **KISS** — keep it simple. Don't over-engineer. Write the minimum code that satisfies the spec. Prefer flat over nested, obvious over clever, fewer files over more.
+- **DRY** — don't repeat yourself. If two mutations share the same permission check, extract a helper. If two components render lists the same way, factor out the pattern. If SQL functions share subqueries, use views or CTEs.
+- **Read before writing** — always read existing files before modifying them. Don't duplicate code that already exists. Don't rewrite files that only need a few lines added.
 - **Never edit** `server-core.ts`, `session.ts`, `signals.ts` — these are infrastructure.
 - **Never edit** `init_db/02_auth.sql` unless auth needs customization.
 - The `user` table already exists — map the spec's Account entity to it.
@@ -241,8 +226,8 @@ Update CSS variables and add component styles as needed.
 - Every doc function's first parameter is `p_user_id INT` — even for public docs.
 - Notify targets must exactly match what clients subscribe to via `openDoc`.
 - **Notify data must match the doc shape.** For root entity updates (`collection: null`), `row_to_json(v_row)::jsonb` is fine. For collection item upserts, build enriched data with nested objects (e.g. `row_to_json(v_row)::jsonb || jsonb_build_object('author', ..., 'children', ...)`). For removes, use `jsonb_build_object('id', v_id)`.
-- **Session singleton**: components call `getSession()`, never `connect()` or `initSession()`.
-- **Boot sequence**: `app.ts` owns `initSession` and `sessionReady`; routes gate on it via `authRoute`.
+- **Session singleton**: components call `getSession()`, never `connect()` or `initSession()`. Upgrade `app-home.ts` from `connect(token)` to `getSession()` if needed.
+- **Boot sequence**: `app.ts` owns `initSession` and `sessionReady`; routes gate on it via `authRoute`. Don't rewrite `app.ts` if it already has this pattern — just add routes.
 - **openDoc starts null**: the server sends `op: "set"` with the full doc — components must handle `null` and `_error` before accessing fields.
 
 ## Presenting your plan

@@ -52,6 +52,9 @@ Read these for detailed implementation guidance:
 - `.claude/docs/server.md` — WebSocket protocol, fan-out, guards
 - `.claude/docs/client.md` — session, signals, doc subscriptions, merging
 - `.claude/docs/database.md` — SQL conventions, notify payload, save/remove pattern
+- `.claude/docs/model.md` — `bun model` CLI, checklists, export workflow
+- `.claude/docs/css.md` — token system, theming, component conventions
+- `.claude/docs/testing.md` — unit and integration test patterns
 
 ## Skills
 

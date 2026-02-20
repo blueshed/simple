@@ -5,7 +5,7 @@ import { createServer } from "./server-core";
 import index from "./index.html";
 
 createServer({
-  preAuth: ["login", "register", "accept_invite"],
+  preAuth: ["login", "register"],
   profileFn: "profile_doc",
   index,
 });
