@@ -31,6 +31,11 @@ Documents are opened by the client (`openDoc("thing_doc", id)`) and closed when 
 Mutations emit `pg_notify('change', ...)` with a `targets` array. The server fans out to every
 client that has a matching doc open. The client merges the delta into the open signal.
 
+Documents support three fetch modes (set in the model with `--cursor` or `--stream`):
+- **select** (default) — full load in one message
+- **cursor** — paginated: first page on open, then `loadMore()` for more
+- **stream** — server auto-sends all pages after the first load
+
 ## Notify payload shape
 
 ```sql

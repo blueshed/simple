@@ -54,13 +54,17 @@ Cardinality: `*` = has-many, `1` = belongs-to.
 ### Documents
 
 ```bash
-bun model add-document <Name> <Entity> [--collection] [--public]
+bun model add-document <Name> <Entity> [--collection] [--public] [--cursor] [--stream]
 bun model remove-document <Name>
 bun model list-documents
 ```
 
 - `--collection` — list document (e.g. a feed), client opens with `openDoc("post_feed", 0)`
 - `--public` — no auth required
+- `--cursor` — paginated: doc function accepts `p_cursor`/`p_limit`, client uses `loadMore()` for subsequent pages
+- `--stream` — streaming: like cursor, but the server auto-sends all pages after the initial load
+
+The fetch mode (`select`, `cursor`, `stream`) appears as a tag on the model site's document page and is included in `export-spec` output. `/implement` uses it to generate the appropriate doc function signature and client-side wiring.
 
 ### Expansions
 

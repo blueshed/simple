@@ -108,7 +108,15 @@ export function createServer(config: {
         if (i !== -1) clients.splice(i, 1);
       },
       async message(ws, raw) {
-        let msg: { type?: string; id: string; fn: string; args: unknown[] };
+        let msg: {
+          type?: string;
+          id: string;
+          fn: string;
+          args: unknown[];
+          cursor?: string | null;
+          limit?: number;
+          stream?: boolean;
+        };
         try {
           msg = JSON.parse(raw as string);
         } catch {
@@ -122,20 +130,65 @@ export function createServer(config: {
           ws.data.docs.add(`${msg.fn}:${docId}`);
           // Call the doc function and send the initial data
           // doc_id 0 = collection doc (no entity id arg), otherwise pass it
-          const args = docId ? [ws.data.user_id, docId] : [ws.data.user_id];
-          const ph = args.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
+          const baseArgs: unknown[] = docId ? [ws.data.user_id, docId] : [ws.data.user_id];
+          // Cursor/limit: append when provided (cursor-aware doc functions accept these)
+          const hasCursor = msg.cursor !== undefined || msg.limit !== undefined;
+          const callArgs = hasCursor
+            ? [...baseArgs, msg.cursor ?? null, msg.limit ?? null]
+            : baseArgs;
+          const ph = callArgs.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
           try {
             const [row] = await sql.unsafe(
               `SELECT ${msg.fn}(${ph}) AS result`,
-              args as any[],
+              callArgs as any[],
             );
-            ws.send(JSON.stringify({
-              type: "notify",
-              doc: msg.fn,
-              doc_id: docId,
-              op: "set",
-              data: row.result,
-            }));
+            const result = row.result;
+            // Cursor-aware functions return { data, cursor, hasMore }
+            // Non-cursor functions return the doc shape directly
+            if (hasCursor && result && typeof result === "object" && "hasMore" in result) {
+              ws.send(JSON.stringify({
+                type: "notify",
+                doc: msg.fn,
+                doc_id: docId,
+                op: "set",
+                data: result.data,
+                cursor: result.cursor ?? null,
+                hasMore: result.hasMore ?? false,
+              }));
+              // Streaming: keep sending pages until exhausted
+              if (msg.stream && result.hasMore && result.cursor) {
+                let cur = result.cursor;
+                while (cur && ws.data.docs.has(`${msg.fn}:${docId}`)) {
+                  const nextArgs = [...baseArgs, cur, msg.limit ?? null];
+                  const nph = nextArgs.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
+                  const [next] = await sql.unsafe(
+                    `SELECT ${msg.fn}(${nph}) AS result`,
+                    nextArgs as any[],
+                  );
+                  const nr = next.result;
+                  if (!nr || !("hasMore" in nr)) break;
+                  ws.send(JSON.stringify({
+                    type: "notify",
+                    doc: msg.fn,
+                    doc_id: docId,
+                    op: "append",
+                    data: nr.data,
+                    cursor: nr.cursor ?? null,
+                    hasMore: nr.hasMore ?? false,
+                  }));
+                  if (!nr.hasMore) break;
+                  cur = nr.cursor;
+                }
+              }
+            } else {
+              ws.send(JSON.stringify({
+                type: "notify",
+                doc: msg.fn,
+                doc_id: docId,
+                op: "set",
+                data: result,
+              }));
+            }
           } catch (e: any) {
             ws.send(JSON.stringify({
               type: "error",
@@ -148,6 +201,24 @@ export function createServer(config: {
         }
         if (msg.type === "close") {
           ws.data.docs.delete(`${msg.fn}:${msg.args?.[0]}`);
+          return;
+        }
+
+        // Fetch: request a page without subscribing (for loadMore)
+        if (msg.type === "fetch") {
+          const docId = msg.args?.[0];
+          const baseArgs: unknown[] = docId ? [ws.data.user_id, docId] : [ws.data.user_id];
+          const callArgs = [...baseArgs, msg.cursor ?? null, msg.limit ?? null];
+          const ph = callArgs.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
+          try {
+            const [row] = await sql.unsafe(
+              `SELECT ${msg.fn}(${ph}) AS result`,
+              callArgs as any[],
+            );
+            ws.send(JSON.stringify({ id: msg.id, ok: true, data: row.result }));
+          } catch (e: any) {
+            ws.send(JSON.stringify({ id: msg.id, ok: false, error: e.message }));
+          }
           return;
         }
 

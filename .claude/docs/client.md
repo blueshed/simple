@@ -96,11 +96,14 @@ Establishes a WebSocket session. Returns:
 
 ```typescript
 {
-  api:      Proxy            // call any postgres function: api.save_thing(1, "name")
-  status:   Signal<string>  // "connected" | "connecting..." | "disconnected"
-  profile:  Signal<unknown> // your profileFn result, null until received
-  openDoc:  (fn, id, data) => Signal  // subscribe to a document
-  closeDoc: (fn, id) => void          // unsubscribe
+  api:        Proxy            // call any postgres function: api.save_thing(1, "name")
+  status:     Signal<string>   // "connected" | "connecting..." | "disconnected"
+  profile:    Signal<unknown>  // your profileFn result, null until received
+  openDoc:    (fn, id, data, opts?) => Signal  // subscribe to a document
+  closeDoc:   (fn, id) => void           // unsubscribe
+  docCursor:  (fn, id) => Signal<string | null>  // current cursor for a doc
+  docHasMore: (fn, id) => Signal<boolean>        // whether more pages exist
+  loadMore:   (fn, id, limit?) => Promise        // fetch next page
 }
 ```
 
@@ -110,7 +113,7 @@ Establishes a WebSocket session. Returns:
 
 **Token errors**: close code `4001` (invalid token) or `1006` before profile arrives clears the stored token and navigates to `/` instead of retrying.
 
-### `openDoc(fn, id, data)`
+### `openDoc(fn, id, data, opts?)`
 
 ```typescript
 const doc = openDoc("thing_doc", id, null);
@@ -121,6 +124,44 @@ closeDoc("thing_doc", id);  // stop receiving updates — call in disconnectedCa
 ```
 
 The server sends `{ type: "notify", op: "set", data: <full doc> }` immediately on open. The client sets the signal directly from that — no initial fetch needed.
+
+#### Cursor/stream options
+
+For paginated documents, pass an options object:
+
+```typescript
+// Cursor mode — loads first page, use loadMore() for subsequent pages
+const doc = openDoc("post_feed", 0, null, { limit: 25 });
+
+// Stream mode — server auto-sends all pages as op:"append" after the first
+const doc = openDoc("post_feed", 0, null, { limit: 25, stream: true });
+```
+
+#### `docCursor(fn, id)` / `docHasMore(fn, id)`
+
+Reactive signals tracking pagination state for an open doc:
+
+```typescript
+const { openDoc, docCursor, docHasMore, loadMore } = getSession();
+
+const doc = openDoc("post_feed", 0, null, { limit: 25 });
+const cursor = docCursor("post_feed", 0);
+const hasMore = docHasMore("post_feed", 0);
+
+// In an effect:
+if (hasMore.get()) {
+  showLoadMoreButton();
+}
+```
+
+#### `loadMore(fn, id, limit?)`
+
+Fetches the next page using the stored cursor. Returns a promise with `{ data, cursor, hasMore }`. The data is automatically merged into the existing doc signal via `op: "append"`.
+
+```typescript
+const btn = this.querySelector("#load-more")!;
+btn.addEventListener("click", () => loadMore("post_feed", 0, 25));
+```
 
 ### `_error` sentinel
 
@@ -157,13 +198,21 @@ When a `notify` event arrives, `merge()` routes it to the matching signal:
 
 1. Look up `"${doc}:${doc_id}"` — skip if not open
 2. `op === "set"` — full doc received on open: `s.set(data)` directly
-3. `collection === null` — root entity changed: spread new fields onto root
-4. `collection = "things"` — find item in array by `id`, splice or upsert
-5. `collection = "a.b.c"` — walk each intermediate segment using `parent_ids[i]`, then splice or upsert in the final array. `parent_ids` has one entry per intermediate segment (all but the last).
+3. `op === "append"` — cursor/stream page: push items onto collection arrays, dedup by `id`
+4. `collection === null` — root entity changed: spread new fields onto root
+5. `collection = "things"` — find item in array by `id`, splice or upsert
+6. `collection = "a.b.c"` — walk each intermediate segment using `parent_ids[i]`, then splice or upsert in the final array. `parent_ids` has one entry per intermediate segment (all but the last).
 
 For collection documents (where the root key IS the collection, e.g. `{posts: [...]}` with `collection: "posts"`), the merge navigates from the doc root. For entity documents (e.g. `{post: {..., post_tags: []}}` with `collection: "post_tags"`), it navigates from the root entity.
 
 **Important**: collection upserts replace the entire item by `id`. The notify data must include nested objects (belongs-to joins, child arrays) matching the doc shape — `row_to_json(v_row)` alone loses them. See `.claude/docs/database.md` for the data shape guidance.
+
+#### `op: "append"` (cursor/stream)
+
+Used by cursor pagination and streaming. The data has the same shape as the doc (matching the `op: "set"` shape). Items are pushed onto collection arrays, skipping duplicates by `id`. This handles:
+- Streaming pages arriving after the initial load
+- `loadMore()` responses merged back into the signal
+- Notifications for items that might overlap with a pending page load
 
 ## Signals (`signals.ts`)
 
@@ -375,6 +424,40 @@ this.disposers.push(effect(() => {
   }
 
   prevIds = currentIds;
+}));
+```
+
+### Pattern: paginated collection (infinite scroll)
+
+```typescript
+const { openDoc, docHasMore, loadMore } = getSession();
+
+const doc = openDoc("post_feed", 0, null, { limit: 25 });
+const hasMore = docHasMore("post_feed", 0);
+
+// Build shell with sentinel element
+this.innerHTML = `<ul id="posts"></ul><div id="sentinel"></div>`;
+
+// Intersection observer triggers loadMore when sentinel is visible
+const sentinel = this.querySelector("#sentinel")!;
+const observer = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting && hasMore.peek()) {
+    loadMore("post_feed", 0, 25);
+  }
+});
+observer.observe(sentinel);
+
+// Effect renders items (same reconciliation as collection doc)
+this.disposers.push(effect(() => {
+  const d = doc.get() as any;
+  if (!d) return;
+  const ul = this.querySelector("#posts")!;
+  // ... reconcile items ...
+}));
+
+// Show/hide sentinel based on hasMore
+this.disposers.push(effect(() => {
+  sentinel.style.display = hasMore.get() ? "block" : "none";
 }));
 ```
 

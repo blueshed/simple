@@ -6,10 +6,22 @@ type Pending = {
   reject: (error: Error) => void;
 };
 
+type DocEntry = {
+  signal: Signal<unknown>;
+  cursor: Signal<string | null>;
+  hasMore: Signal<boolean>;
+};
+
+export type OpenDocOpts = {
+  cursor?: string | null;
+  limit?: number;
+  stream?: boolean;
+};
+
 export function connect(token: string) {
   const status = signal<string>("connecting...");
   const profile = signal<unknown>(null);
-  const docs = new Map<string, Signal<unknown>>();
+  const docs = new Map<string, DocEntry>();
   const pending = new Map<string, Pending>();
   let id = 0;
   let ws: WebSocket;
@@ -63,8 +75,8 @@ export function connect(token: string) {
         // A doc open failed (e.g. permission denied) — set the signal to an error sentinel
         // so the component can render a meaningful message instead of loading forever.
         const key = `${msg.fn}:${msg.doc_id}`;
-        const s = docs.get(key);
-        if (s) s.set({ _error: msg.error });
+        const entry = docs.get(key);
+        if (entry) entry.signal.set({ _error: msg.error });
         return;
       }
       const p = pending.get(msg.id);
@@ -89,12 +101,67 @@ export function connect(token: string) {
   function merge(msg: ServerEvent) {
     const { doc, doc_id, collection, parent_ids, op, data } = msg as any;
     const key = `${doc}:${doc_id}`;
-    const s = docs.get(key);
-    if (!s || !data) return;
+    const entry = docs.get(key);
+    if (!entry || !data) return;
+
+    const s = entry.signal;
+
+    // Update cursor tracking if present in the message
+    if ("cursor" in msg) entry.cursor.set(msg.cursor as string | null);
+    if ("hasMore" in msg) entry.hasMore.set(!!msg.hasMore);
 
     // Full document load (initial open response)
     if (op === "set") {
       s.set(data);
+      return;
+    }
+
+    // Append: push items onto a collection array (used by cursor/stream)
+    if (op === "append") {
+      const current = s.peek() as any;
+      if (!current) {
+        s.set(data);
+        return;
+      }
+      // data is the same shape as the doc — merge each collection array
+      const rootKey = Object.keys(current)[0];
+      if (Array.isArray(data)) {
+        // data is a raw array for collection docs
+        const arr = current[rootKey];
+        if (Array.isArray(arr)) {
+          // Dedup by id — skip items already present
+          const existing = new Set(arr.map((item: any) => item.id));
+          for (const item of data) {
+            if (!existing.has(item.id)) arr.push(item);
+          }
+          s.set({ ...current });
+        }
+      } else if (typeof data === "object") {
+        // data is a doc shape — merge each array property
+        const root = current[rootKey];
+        if (root && typeof root === "object") {
+          for (const [k, v] of Object.entries(data)) {
+            if (Array.isArray(v) && Array.isArray(root[k])) {
+              const existing = new Set(root[k].map((item: any) => item.id));
+              for (const item of v as any[]) {
+                if (!existing.has(item.id)) root[k].push(item);
+              }
+            }
+          }
+          s.set({ ...current });
+        } else {
+          // Collection doc root — data keys match root keys
+          for (const [k, v] of Object.entries(data)) {
+            if (Array.isArray(v) && Array.isArray(current[k])) {
+              const existing = new Set(current[k].map((item: any) => item.id));
+              for (const item of v as any[]) {
+                if (!existing.has(item.id)) current[k].push(item);
+              }
+            }
+          }
+          s.set({ ...current });
+        }
+      }
       return;
     }
 
@@ -144,11 +211,17 @@ export function connect(token: string) {
     s.set({ ...current });
   }
 
-  function openDoc(fn: string, docId: number, data: unknown): Signal<unknown> {
+  function openDoc(fn: string, docId: number, data: unknown, opts?: OpenDocOpts): Signal<unknown> {
     const key = `${fn}:${docId}`;
     const s = signal<unknown>(data);
-    docs.set(key, s);
-    send({ type: "open", fn, args: [docId] });
+    const cursorSig = signal<string | null>(null);
+    const hasMoreSig = signal<boolean>(false);
+    docs.set(key, { signal: s, cursor: cursorSig, hasMore: hasMoreSig });
+    const msg: any = { type: "open", fn, args: [docId] };
+    if (opts?.cursor !== undefined) msg.cursor = opts.cursor;
+    if (opts?.limit !== undefined) msg.limit = opts.limit;
+    if (opts?.stream) msg.stream = true;
+    send(msg);
     return s;
   }
 
@@ -156,6 +229,49 @@ export function connect(token: string) {
     const key = `${fn}:${docId}`;
     docs.delete(key);
     send({ type: "close", fn, args: [docId] });
+  }
+
+  function docCursor(fn: string, docId: number): Signal<string | null> {
+    const entry = docs.get(`${fn}:${docId}`);
+    return entry ? entry.cursor : signal<string | null>(null);
+  }
+
+  function docHasMore(fn: string, docId: number): Signal<boolean> {
+    const entry = docs.get(`${fn}:${docId}`);
+    return entry ? entry.hasMore : signal<boolean>(false);
+  }
+
+  function loadMore(fn: string, docId: number, limit?: number): Promise<unknown> {
+    const entry = docs.get(`${fn}:${docId}`);
+    const cur = entry?.cursor.peek();
+    if (!cur) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+      const rid = String(++id);
+      pending.set(rid, {
+        resolve: (result: any) => {
+          // Cursor-aware result: { data, cursor, hasMore }
+          if (result && typeof result === "object" && "hasMore" in result) {
+            if (entry) {
+              entry.cursor.set(result.cursor ?? null);
+              entry.hasMore.set(!!result.hasMore);
+            }
+            // Merge data into the existing signal as append
+            merge({
+              type: "notify",
+              doc: fn,
+              doc_id: docId,
+              op: "append",
+              data: result.data,
+            });
+            resolve(result);
+          } else {
+            resolve(result);
+          }
+        },
+        reject,
+      });
+      send({ type: "fetch", id: rid, fn, args: [docId], cursor: cur, limit: limit ?? null });
+    });
   }
 
   const api = new Proxy(
@@ -172,7 +288,7 @@ export function connect(token: string) {
     },
   );
 
-  return { api, status, profile, openDoc, closeDoc };
+  return { api, status, profile, openDoc, closeDoc, docCursor, docHasMore, loadMore };
 }
 
 export type Session = ReturnType<typeof connect>;

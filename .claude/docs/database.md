@@ -47,6 +47,68 @@ $$;
 
 Root entity nested under its name. Collections use `jsonb_agg()`, defaulting to `'[]'::jsonb`.
 
+## Cursor-Aware Doc Functions
+
+For documents marked as `cursor` or `stream` in the model, the doc function accepts optional `p_cursor` and `p_limit` parameters. It returns `{ data, cursor, hasMore }` instead of the raw doc shape.
+
+```sql
+CREATE OR REPLACE FUNCTION post_feed(
+    p_user_id INT,
+    p_cursor TEXT DEFAULT NULL,
+    p_limit INT DEFAULT 25
+) RETURNS JSONB LANGUAGE plpgsql AS $$
+DECLARE
+    v_items JSONB;
+    v_last_id INT;
+    v_has_more BOOLEAN;
+BEGIN
+    -- Keyset pagination: use cursor as the last-seen id
+    SELECT jsonb_agg(row_to_json(sub)), MIN(sub.id)
+    INTO v_items, v_last_id
+    FROM (
+        SELECT p.id, p.title, p.created_at
+        FROM post p
+        WHERE (p_cursor IS NULL OR p.id < p_cursor::int)
+        ORDER BY p.id DESC
+        LIMIT p_limit + 1  -- fetch one extra to detect hasMore
+    ) sub;
+
+    -- Check if there are more items beyond this page
+    v_has_more := jsonb_array_length(COALESCE(v_items, '[]')) > p_limit;
+    IF v_has_more THEN
+        v_items := v_items - (jsonb_array_length(v_items) - 1);  -- trim the extra
+    END IF;
+
+    RETURN jsonb_build_object(
+        'data', jsonb_build_object('post_feed', COALESCE(v_items, '[]')),
+        'cursor', CASE WHEN v_has_more THEN v_last_id::text ELSE NULL END,
+        'hasMore', v_has_more
+    );
+END;
+$$;
+```
+
+**Key conventions:**
+- `p_cursor` is `TEXT` (opaque to the client) — encode whatever pagination key you need
+- `p_limit` has a sensible default (e.g. 25)
+- When `p_cursor IS NULL`, return the first page
+- Fetch `p_limit + 1` rows, trim the extra, set `hasMore` accordingly
+- The `data` field contains the same shape as a non-cursor doc function would return
+- The `cursor` field is `NULL` when there are no more pages
+- Use keyset pagination (WHERE id < cursor) not OFFSET — it's O(1) not O(n)
+
+When called without cursor/limit (existing `open` without opts), the server calls the function with just `(user_id)` or `(user_id, doc_id)` — the DEFAULT values handle it. To support both modes, ensure the function returns the raw doc shape when `p_cursor IS NULL AND p_limit IS NULL`:
+
+```sql
+-- Dual-mode: returns full doc or paginated
+IF p_limit IS NULL THEN
+    -- Full load (legacy select mode)
+    RETURN jsonb_build_object('post_feed', (SELECT jsonb_agg(...) FROM post));
+END IF;
+-- Paginated load
+...
+```
+
 ## Save/Remove Pattern
 
 ```sql
