@@ -18,6 +18,11 @@ function bootSession(token: string): void {
     if (session.profile.get() && !fired) {
       fired = true;
       sessionReady.set(true);
+      // Load claude helper if server has it enabled
+      (window as any).__session = session;
+      const s = document.createElement("script");
+      s.src = "/claude.js";
+      document.head.appendChild(s);
     }
   });
 }

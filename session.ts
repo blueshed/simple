@@ -288,7 +288,7 @@ export function connect(token: string) {
     },
   );
 
-  return { api, status, profile, openDoc, closeDoc, docCursor, docHasMore, loadMore };
+  return { api, status, profile, openDoc, closeDoc, docCursor, docHasMore, loadMore, docs };
 }
 
 export type Session = ReturnType<typeof connect>;

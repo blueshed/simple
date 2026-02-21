@@ -13,6 +13,7 @@ export function createServer(config: {
   index: Response;
   port?: number;
   databaseUrl?: string;
+  claudeHelper?: boolean;
 }) {
   const sql = postgres(config.databaseUrl ?? database_url);
   const clients: WS[] = [];
@@ -73,6 +74,41 @@ export function createServer(config: {
           return Response.json({ ok: false, error: e.message }, { status: 400 });
         }
       },
+      ...(config.claudeHelper ? { "/claude.js": async () => {
+        const rows = await sql`
+          SELECT p.proname AS name,
+                 array_to_string(p.proargnames, ', ') AS params
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = 'public'
+             AND p.prokind = 'f'
+             AND p.proargnames[1] IS NOT NULL
+             AND p.proargnames[1] LIKE 'p_%'
+           ORDER BY p.proname`;
+        const functions = JSON.stringify(rows);
+        return new Response(`(function() {
+  var s = window.__session;
+  if (!s) return;
+  var fns = ${functions};
+  window.claude = {
+    api: s.api,
+    functions: fns,
+    state: function() {
+      var out = {};
+      s.docs.forEach(function(entry, key) { out[key] = entry.signal.peek(); });
+      return out;
+    },
+    openDoc: s.openDoc,
+    closeDoc: s.closeDoc,
+    navigate: function(path) { location.hash = path; },
+    route: function() { return location.hash.slice(1) || '/'; }
+  };
+  var btn = document.createElement('div');
+  btn.textContent = '\\u2728 Claude';
+  btn.style.cssText = 'position:fixed;bottom:12px;right:12px;background:#7c3aed;color:#fff;padding:6px 14px;border-radius:20px;font:600 13px/1 system-ui;opacity:0.85;z-index:9999;pointer-events:none;';
+  document.body.appendChild(btn);
+})();`, { headers: { "Content-Type": "application/javascript" } });
+      }} : {}),
       "/ws": async (
         req: Request,
         server: {
