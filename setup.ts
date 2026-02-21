@@ -44,6 +44,14 @@ if (!existsSync("model.db")) {
   console.log(`✓ model.db  (created for Easy volume mount)`);
 }
 
+// Un-ignore model.db and spec.md so the user's project tracks them
+const gitignore = readFileSync(".gitignore", "utf8");
+const cleaned = gitignore.replace(/^model\.db\n?/m, "").replace(/^spec\.md\n?/m, "");
+if (cleaned !== gitignore) {
+  writeFileSync(".gitignore", cleaned);
+  console.log(`✓ .gitignore  (model.db and spec.md now tracked)`);
+}
+
 // Self-delete — this script is only needed once after bun create
 unlinkSync("setup.ts");
 console.log(`✓ setup.ts  (deleted)`);
