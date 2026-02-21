@@ -173,3 +173,34 @@ jsonb_build_object(
 ```
 
 The server fans out each target to every client that has that document open.
+
+## Migrations
+
+`init_db/` scripts run once on first Docker boot — they set up a fresh database. For evolving an existing database, use migrations.
+
+### File format
+
+Numbered SQL files in `migrations/`, each with `-- up` and `-- down` sections:
+
+```sql
+-- up
+ALTER TABLE thing ADD COLUMN status TEXT DEFAULT 'active';
+
+-- down
+ALTER TABLE thing DROP COLUMN status;
+```
+
+### CLI
+
+```bash
+bun run migrate              # apply all pending migrations
+bun run migrate up           # apply next pending migration
+bun run migrate down         # rollback last applied migration
+bun run migrate status       # show applied/pending list
+```
+
+### How it works
+
+A `_migrations` table tracks which files have been applied. Each migration runs in its own transaction — if it fails, the transaction rolls back and the migration stays pending.
+
+Functions use `CREATE OR REPLACE` and are idempotent, so they don't need migrations. Migrations are for schema changes: new tables, columns, indexes, constraints.

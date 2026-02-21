@@ -20,6 +20,8 @@ A minimal full-stack pattern: postgres owns everything, the server routes, the c
 | `init_db/02_auth.sql` | Auth functions — **do not edit** unless you need custom auth |
 | `init_db/03_functions.sql` | Your doc functions and mutations |
 | `init_db/04_seed.sql` | Dev seed data |
+| `migrate.ts` | Migration runner — **do not edit** |
+| `migrations/` | Your numbered SQL migration files |
 
 ## Pattern
 
@@ -56,7 +58,7 @@ PERFORM pg_notify('change', jsonb_build_object(
 Read these for detailed implementation guidance:
 - `.claude/docs/server.md` — WebSocket protocol, fan-out, guards
 - `.claude/docs/client.md` — session, signals, doc subscriptions, merging
-- `.claude/docs/database.md` — SQL conventions, notify payload, save/remove pattern
+- `.claude/docs/database.md` — SQL conventions, notify payload, save/remove pattern, migrations
 - `.claude/docs/model.md` — `bun model` CLI, checklists, export workflow
 - `.claude/docs/css.md` — token system, theming, component conventions
 - `.claude/docs/testing.md` — unit and integration test patterns
