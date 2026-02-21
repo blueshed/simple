@@ -77,15 +77,50 @@ export function createServer(config: {
       ...(config.claudeHelper ? { "/claude.js": async () => {
         const rows = await sql`
           SELECT p.proname AS name,
-                 array_to_string(p.proargnames, ', ') AS params
+                 p.proargnames AS arg_names
             FROM pg_proc p
             JOIN pg_namespace n ON n.oid = p.pronamespace
            WHERE n.nspname = 'public'
              AND p.prokind = 'f'
              AND p.proargnames[1] IS NOT NULL
              AND p.proargnames[1] LIKE 'p_%'
+             AND left(p.proname, 1) != '_'
            ORDER BY p.proname`;
-        const functions = JSON.stringify(rows);
+        // Build help: strip p_user_id, skip preAuth functions, show clean signatures
+        const apiLines: string[] = [];
+        const fnList: { name: string; params: string }[] = [];
+        for (const r of rows) {
+          if (config.preAuth.includes(r.name)) continue;
+          const args: string[] = (r.arg_names as string[])
+            .filter((a: string) => a !== "p_user_id")
+            .map((a: string) => a.replace(/^p_/, ""));
+          apiLines.push(`  claude.api.${r.name}(${args.join(", ")})`);
+          fnList.push({ name: r.name, params: args.join(", ") });
+        }
+        const functions = JSON.stringify(fnList);
+        const helpText = [
+          "=== window.claude — API helper ===",
+          "",
+          "IMPORTANT: The server auto-injects user_id. Never pass it.",
+          "",
+          "Call functions via claude.api.<name>(...).then(r => r)",
+          "All calls return Promises. Results are JSON.",
+          "",
+          "Available functions:",
+          ...apiLines,
+          "",
+          "Conventions:",
+          "- For save_* functions: pass null for id to CREATE, or a number to UPDATE",
+          "- For remove_* functions: pass the id to delete",
+          "",
+          "Read current state:",
+          "  claude.state()  — returns all open doc data as plain JSON",
+          "  Look inside the state to find entity ids, names, etc.",
+          "",
+          "Navigation:",
+          "  claude.navigate('/path')  — change route",
+          "  claude.route()            — get current route",
+        ].join("\\n");
         return new Response(`(function() {
   var s = window.__session;
   if (!s) return;
@@ -93,6 +128,7 @@ export function createServer(config: {
   window.claude = {
     api: s.api,
     functions: fns,
+    help: "${helpText}",
     state: function() {
       var out = {};
       s.docs.forEach(function(entry, key) { out[key] = entry.signal.peek(); });
