@@ -45,7 +45,7 @@ class AppLogin extends HTMLElement {
     this.querySelector("#register-form")!.addEventListener("submit", async (e) => {
       e.preventDefault();
       const form = e.target as HTMLFormElement;
-      await this.call("register", [form.name.value, form.email.value, form.password.value]);
+      await this.call("register", [(form.elements.namedItem("name") as HTMLInputElement).value, form.email.value, form.password.value]);
     });
   }
 

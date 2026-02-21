@@ -84,7 +84,7 @@ try {
     `SELECT ${fn}(${ph}) AS result`,
     parsed as any[],
   );
-  console.log(JSON.stringify(row.result, null, 2));
+  console.log(JSON.stringify(row!.result, null, 2));
 } catch (e: any) {
   console.error(e.message);
   process.exit(1);

@@ -7,5 +7,6 @@ import index from "./index.html";
 createServer({
   preAuth: ["login", "register"],
   profileFn: "profile_doc",
-  index,
+  index: index as unknown as Response,
+  claudeHelper: false,
 });

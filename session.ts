@@ -124,7 +124,7 @@ export function connect(token: string) {
         return;
       }
       // data is the same shape as the doc — merge each collection array
-      const rootKey = Object.keys(current)[0];
+      const rootKey = Object.keys(current)[0]!;
       if (Array.isArray(data)) {
         // data is a raw array for collection docs
         const arr = current[rootKey];
@@ -168,7 +168,7 @@ export function connect(token: string) {
     const current = s.peek() as any;
     if (!current) return;
     // doc structure: { <rootKey>: { ...fields, <collection>[] } }
-    const rootKey = Object.keys(current)[0];
+    const rootKey = Object.keys(current)[0]!;
     const root = current[rootKey] as any;
 
     if (!collection) {

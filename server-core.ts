@@ -69,7 +69,7 @@ export function createServer(config: {
             `SELECT ${body.fn}(${ph}) AS result`,
             body.args as any[],
           );
-          return Response.json({ ok: true, data: row.result });
+          return Response.json({ ok: true, data: row!.result });
         } catch (e: any) {
           return Response.json({ ok: false, error: e.message }, { status: 400 });
         }
@@ -158,7 +158,7 @@ export function createServer(config: {
         if (!token) return new Response("missing token", { status: 401 });
         try {
           const [row] = await sql`SELECT _verify_token(${token}) AS user_id`;
-          const user_id = row.user_id;
+          const user_id = row!.user_id;
           if (server.upgrade(req, { data: { user_id, docs: new Set() } })) return;
           return new Response("upgrade failed", { status: 500 });
         } catch {
@@ -175,7 +175,7 @@ export function createServer(config: {
           `SELECT ${config.profileFn}($1::int) AS result`,
           [ws.data.user_id],
         );
-        ws.send(JSON.stringify({ type: "profile", data: row.result }));
+        ws.send(JSON.stringify({ type: "profile", data: row!.result }));
       },
       close(ws) {
         const i = clients.indexOf(ws);
@@ -198,6 +198,24 @@ export function createServer(config: {
           return;
         }
 
+        // Guard: block private functions and preAuth functions on the WebSocket
+        if (msg.fn.startsWith("_")) {
+          ws.send(
+            JSON.stringify({ id: msg.id, ok: false, error: "not allowed" }),
+          );
+          return;
+        }
+        if (preAuth.has(msg.fn)) {
+          ws.send(
+            JSON.stringify({
+              id: msg.id,
+              ok: false,
+              error: "use /auth endpoint",
+            }),
+          );
+          return;
+        }
+
         // Handle open/close doc subscription messages
         if (msg.type === "open") {
           const docId = msg.args?.[0];
@@ -216,7 +234,7 @@ export function createServer(config: {
               `SELECT ${msg.fn}(${ph}) AS result`,
               callArgs as any[],
             );
-            const result = row.result;
+            const result = row!.result;
             // Cursor-aware functions return { data, cursor, hasMore }
             // Non-cursor functions return the doc shape directly
             if (hasCursor && result && typeof result === "object" && "hasMore" in result) {
@@ -239,7 +257,7 @@ export function createServer(config: {
                     `SELECT ${msg.fn}(${nph}) AS result`,
                     nextArgs as any[],
                   );
-                  const nr = next.result;
+                  const nr = next!.result;
                   if (!nr || !("hasMore" in nr)) break;
                   ws.send(JSON.stringify({
                     type: "notify",
@@ -289,28 +307,10 @@ export function createServer(config: {
               `SELECT ${msg.fn}(${ph}) AS result`,
               callArgs as any[],
             );
-            ws.send(JSON.stringify({ id: msg.id, ok: true, data: row.result }));
+            ws.send(JSON.stringify({ id: msg.id, ok: true, data: row!.result }));
           } catch (e: any) {
             ws.send(JSON.stringify({ id: msg.id, ok: false, error: e.message }));
           }
-          return;
-        }
-
-        if (msg.fn.startsWith("_")) {
-          ws.send(
-            JSON.stringify({ id: msg.id, ok: false, error: "not allowed" }),
-          );
-          return;
-        }
-
-        if (preAuth.has(msg.fn)) {
-          ws.send(
-            JSON.stringify({
-              id: msg.id,
-              ok: false,
-              error: "use /auth endpoint",
-            }),
-          );
           return;
         }
 
@@ -321,7 +321,7 @@ export function createServer(config: {
             `SELECT ${msg.fn}(${ph}) AS result`,
             args as any[],
           );
-          ws.send(JSON.stringify({ id: msg.id, ok: true, data: row.result }));
+          ws.send(JSON.stringify({ id: msg.id, ok: true, data: row!.result }));
         } catch (e: any) {
           ws.send(JSON.stringify({ id: msg.id, ok: false, error: e.message }));
         }
