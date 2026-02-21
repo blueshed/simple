@@ -95,6 +95,8 @@ export function createServer(config: {
       },
     },
     websocket: {
+      idleTimeout: 30, // Heroku closes at 55s; Bun auto-pings before this
+      sendPings: true,
       async open(ws) {
         clients.push(ws);
         const [row] = await sql.unsafe(
