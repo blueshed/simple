@@ -2,8 +2,7 @@ import postgres from "postgres";
 import type { ServerWebSocket } from "bun";
 
 export const database_url =
-  process.env.DATABASE_URL ??
-  `postgres://postgres:secret@localhost:5432/myapp`;
+  process.env.DATABASE_URL ?? `postgres://postgres:secret@localhost:5432/myapp`;
 
 type WS = ServerWebSocket<{ user_id: number; docs: Set<string> }>;
 
@@ -13,7 +12,7 @@ export function createServer(config: {
   index: Response;
   port?: number;
   databaseUrl?: string;
-  claudeHelper?: boolean;
+  routes?: Record<string, any>;
 }) {
   const sql = postgres(config.databaseUrl ?? database_url);
   const clients: WS[] = [];
@@ -54,7 +53,10 @@ export function createServer(config: {
         try {
           body = await req.json();
         } catch {
-          return Response.json({ ok: false, error: "bad json" }, { status: 400 });
+          return Response.json(
+            { ok: false, error: "bad json" },
+            { status: 400 },
+          );
         }
         if (!preAuth.has(body.fn))
           return Response.json(
@@ -71,80 +73,13 @@ export function createServer(config: {
           );
           return Response.json({ ok: true, data: row!.result });
         } catch (e: any) {
-          return Response.json({ ok: false, error: e.message }, { status: 400 });
+          return Response.json(
+            { ok: false, error: e.message },
+            { status: 400 },
+          );
         }
       },
-      ...(config.claudeHelper ? { "/claude.js": async () => {
-        const rows = await sql`
-          SELECT p.proname AS name,
-                 p.proargnames AS arg_names
-            FROM pg_proc p
-            JOIN pg_namespace n ON n.oid = p.pronamespace
-           WHERE n.nspname = 'public'
-             AND p.prokind = 'f'
-             AND p.proargnames[1] IS NOT NULL
-             AND p.proargnames[1] LIKE 'p_%'
-             AND left(p.proname, 1) != '_'
-           ORDER BY p.proname`;
-        // Build help: strip p_user_id, skip preAuth functions, show clean signatures
-        const apiLines: string[] = [];
-        const fnList: { name: string; params: string }[] = [];
-        for (const r of rows) {
-          if (config.preAuth.includes(r.name)) continue;
-          const args: string[] = (r.arg_names as string[])
-            .filter((a: string) => a !== "p_user_id")
-            .map((a: string) => a.replace(/^p_/, ""));
-          apiLines.push(`  claude.api.${r.name}(${args.join(", ")})`);
-          fnList.push({ name: r.name, params: args.join(", ") });
-        }
-        const functions = JSON.stringify(fnList);
-        const helpText = [
-          "=== window.claude — API helper ===",
-          "",
-          "IMPORTANT: The server auto-injects user_id. Never pass it.",
-          "",
-          "Call functions via claude.api.<name>(...).then(r => r)",
-          "All calls return Promises. Results are JSON.",
-          "",
-          "Available functions:",
-          ...apiLines,
-          "",
-          "Conventions:",
-          "- For save_* functions: pass null for id to CREATE, or a number to UPDATE",
-          "- For remove_* functions: pass the id to delete",
-          "",
-          "Read current state:",
-          "  claude.state()  — returns all open doc data as plain JSON",
-          "  Look inside the state to find entity ids, names, etc.",
-          "",
-          "Navigation:",
-          "  claude.navigate('/path')  — change route",
-          "  claude.route()            — get current route",
-        ].join("\\n");
-        return new Response(`(function() {
-  var s = window.__session;
-  if (!s) return;
-  var fns = ${functions};
-  window.claude = {
-    api: s.api,
-    functions: fns,
-    help: "${helpText}",
-    state: function() {
-      var out = {};
-      s.docs.forEach(function(entry, key) { out[key] = entry.signal.peek(); });
-      return out;
-    },
-    openDoc: s.openDoc,
-    closeDoc: s.closeDoc,
-    navigate: function(path) { location.hash = path; },
-    route: function() { return location.hash.slice(1) || '/'; }
-  };
-  var btn = document.createElement('div');
-  btn.textContent = '\\u2728 Claude';
-  btn.style.cssText = 'position:fixed;bottom:12px;right:12px;background:#7c3aed;color:#fff;padding:6px 14px;border-radius:20px;font:600 13px/1 system-ui;opacity:0.85;z-index:9999;pointer-events:none;';
-  document.body.appendChild(btn);
-})();`, { headers: { "Content-Type": "application/javascript" } });
-      }} : {}),
+      ...config.routes,
       "/ws": async (
         req: Request,
         server: {
@@ -159,7 +94,8 @@ export function createServer(config: {
         try {
           const [row] = await sql`SELECT _verify_token(${token}) AS user_id`;
           const user_id = row!.user_id;
-          if (server.upgrade(req, { data: { user_id, docs: new Set() } })) return;
+          if (server.upgrade(req, { data: { user_id, docs: new Set() } }))
+            return;
           return new Response("upgrade failed", { status: 500 });
         } catch {
           return new Response("invalid token", { status: 401 });
@@ -222,13 +158,17 @@ export function createServer(config: {
           ws.data.docs.add(`${msg.fn}:${docId}`);
           // Call the doc function and send the initial data
           // doc_id 0 = collection doc (no entity id arg), otherwise pass it
-          const baseArgs: unknown[] = docId ? [ws.data.user_id, docId] : [ws.data.user_id];
+          const baseArgs: unknown[] = docId
+            ? [ws.data.user_id, docId]
+            : [ws.data.user_id];
           // Cursor/limit: append when provided (cursor-aware doc functions accept these)
           const hasCursor = msg.cursor !== undefined || msg.limit !== undefined;
           const callArgs = hasCursor
             ? [...baseArgs, msg.cursor ?? null, msg.limit ?? null]
             : baseArgs;
-          const ph = callArgs.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
+          const ph = callArgs
+            .map((_: unknown, i: number) => `$${i + 1}`)
+            .join(", ");
           try {
             const [row] = await sql.unsafe(
               `SELECT ${msg.fn}(${ph}) AS result`,
@@ -237,57 +177,72 @@ export function createServer(config: {
             const result = row!.result;
             // Cursor-aware functions return { data, cursor, hasMore }
             // Non-cursor functions return the doc shape directly
-            if (hasCursor && result && typeof result === "object" && "hasMore" in result) {
-              ws.send(JSON.stringify({
-                type: "notify",
-                doc: msg.fn,
-                doc_id: docId,
-                op: "set",
-                data: result.data,
-                cursor: result.cursor ?? null,
-                hasMore: result.hasMore ?? false,
-              }));
+            if (
+              hasCursor &&
+              result &&
+              typeof result === "object" &&
+              "hasMore" in result
+            ) {
+              ws.send(
+                JSON.stringify({
+                  type: "notify",
+                  doc: msg.fn,
+                  doc_id: docId,
+                  op: "set",
+                  data: result.data,
+                  cursor: result.cursor ?? null,
+                  hasMore: result.hasMore ?? false,
+                }),
+              );
               // Streaming: keep sending pages until exhausted
               if (msg.stream && result.hasMore && result.cursor) {
                 let cur = result.cursor;
                 while (cur && ws.data.docs.has(`${msg.fn}:${docId}`)) {
                   const nextArgs = [...baseArgs, cur, msg.limit ?? null];
-                  const nph = nextArgs.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
+                  const nph = nextArgs
+                    .map((_: unknown, i: number) => `$${i + 1}`)
+                    .join(", ");
                   const [next] = await sql.unsafe(
                     `SELECT ${msg.fn}(${nph}) AS result`,
                     nextArgs as any[],
                   );
                   const nr = next!.result;
                   if (!nr || !("hasMore" in nr)) break;
-                  ws.send(JSON.stringify({
-                    type: "notify",
-                    doc: msg.fn,
-                    doc_id: docId,
-                    op: "append",
-                    data: nr.data,
-                    cursor: nr.cursor ?? null,
-                    hasMore: nr.hasMore ?? false,
-                  }));
+                  ws.send(
+                    JSON.stringify({
+                      type: "notify",
+                      doc: msg.fn,
+                      doc_id: docId,
+                      op: "append",
+                      data: nr.data,
+                      cursor: nr.cursor ?? null,
+                      hasMore: nr.hasMore ?? false,
+                    }),
+                  );
                   if (!nr.hasMore) break;
                   cur = nr.cursor;
                 }
               }
             } else {
-              ws.send(JSON.stringify({
-                type: "notify",
-                doc: msg.fn,
-                doc_id: docId,
-                op: "set",
-                data: result,
-              }));
+              ws.send(
+                JSON.stringify({
+                  type: "notify",
+                  doc: msg.fn,
+                  doc_id: docId,
+                  op: "set",
+                  data: result,
+                }),
+              );
             }
           } catch (e: any) {
-            ws.send(JSON.stringify({
-              type: "error",
-              fn: msg.fn,
-              doc_id: docId,
-              error: e.message,
-            }));
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                fn: msg.fn,
+                doc_id: docId,
+                error: e.message,
+              }),
+            );
           }
           return;
         }
@@ -299,17 +254,25 @@ export function createServer(config: {
         // Fetch: request a page without subscribing (for loadMore)
         if (msg.type === "fetch") {
           const docId = msg.args?.[0];
-          const baseArgs: unknown[] = docId ? [ws.data.user_id, docId] : [ws.data.user_id];
+          const baseArgs: unknown[] = docId
+            ? [ws.data.user_id, docId]
+            : [ws.data.user_id];
           const callArgs = [...baseArgs, msg.cursor ?? null, msg.limit ?? null];
-          const ph = callArgs.map((_: unknown, i: number) => `$${i + 1}`).join(", ");
+          const ph = callArgs
+            .map((_: unknown, i: number) => `$${i + 1}`)
+            .join(", ");
           try {
             const [row] = await sql.unsafe(
               `SELECT ${msg.fn}(${ph}) AS result`,
               callArgs as any[],
             );
-            ws.send(JSON.stringify({ id: msg.id, ok: true, data: row!.result }));
+            ws.send(
+              JSON.stringify({ id: msg.id, ok: true, data: row!.result }),
+            );
           } catch (e: any) {
-            ws.send(JSON.stringify({ id: msg.id, ok: false, error: e.message }));
+            ws.send(
+              JSON.stringify({ id: msg.id, ok: false, error: e.message }),
+            );
           }
           return;
         }

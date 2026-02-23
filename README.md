@@ -46,7 +46,9 @@ Client                    Server                  Postgres
 | `server-core.ts` | Generic WebSocket relay — **do not edit** |
 | `session.ts` | Generic WebSocket client — **do not edit** |
 | `signals.ts` | Generic reactive primitives — **do not edit** |
-| `server.ts` | Your app entry point — configure `preAuth`, `profileFn` |
+| `server.ts` | Your app entry point — configure `preAuth`, `profileFn`, custom routes |
+| `claude-helper.ts` | Optional `/claude.js` route for browser automation, enabled by `RUNTIME_CLAUDE=true` — **do not edit** |
+| `bunfig.toml` | Bun config — inlines `RUNTIME_*` env vars into client code — **do not edit** |
 | `app.ts` | Your client routing — add/rename routes |
 | `index.html` | HTML shell — update title |
 | `styles.css` | CSS tokens — customise colours/fonts |

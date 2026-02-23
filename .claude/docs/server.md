@@ -13,8 +13,39 @@ createServer({
   index:      Response;  // the HTML bundle to serve at /
   port?:      number;    // default: process.env.PORT || 3000
   databaseUrl?: string;  // default: DATABASE_URL env, or postgres://postgres:secret@localhost:5432/myapp (substituted by setup.ts)
+  routes?:    Record<string, (req: Request) => Response | Promise<Response>>;  // custom HTTP routes
 })
 ```
+
+### Custom routes
+
+Pass additional HTTP routes via the `routes` config. They are spread into the Bun route map alongside the built-in `/`, `/auth`, and `/ws` routes.
+
+```typescript
+import { claudeHelperRoute } from "./claude-helper";
+
+const preAuth = ["login", "register"];
+
+createServer({
+  preAuth,
+  profileFn: "profile_doc",
+  index: index as unknown as Response,
+  routes: {
+    ...(process.env.RUNTIME_CLAUDE === "true" && {
+      "/claude.js": claudeHelperRoute({ preAuth }),
+    }),
+  },
+});
+```
+
+The claude helper is gated on `RUNTIME_CLAUDE=true` on both server and client. The client check requires `bunfig.toml` to inline `RUNTIME_*` env vars at serve time:
+
+```toml
+[serve.static]
+env = "RUNTIME_*"
+```
+
+Start with: `RUNTIME_CLAUDE=true bun run dev`
 
 ## Architecture
 
