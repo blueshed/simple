@@ -11,8 +11,9 @@ Decompose application requirements into [Simple](https://github.com/blueshed/sim
 > `bun model` resolves to `docker compose exec easy bun model` via the `model` script in package.json — it runs inside the Easy container.
 
 **Important**:
-- Most CLI args are **positional**, not flags. Use the exact syntax from `reference.md`. Do NOT invent flags like `--actor` — the CLI will reject them.
+- The CLI uses **7 generic commands** (`save`, `delete`, `list`, `get`, `export`, `doctor`, `batch`) operating on **13 schemas**. All data is passed as **JSON objects**.
 - **Run commands individually**, not in batch. Each command should be a separate `bun model` call so you can see errors immediately and fix them before proceeding. Only use `bun model batch` for large bulk imports where you've already verified the syntax.
+- Save uses **coalescing upsert** by natural key — only provided fields are updated, missing fields are left unchanged. This means you can update a single field without re-specifying everything.
 
 ## Before you start
 
@@ -49,6 +50,7 @@ Created with `bun create blueshed/simple <app-name>`.
 | **Expansion** | Related entity loaded within a document (has-many, belongs-to, nestable) | SQL subqueries/joins in the doc function: `jsonb_agg(...)` for has-many, `jsonb_build_object(...)` for belongs-to |
 | **Method** | A mutation the user can perform on an entity | Postgres function: `save_room(p_user_id, ...)` or `remove_room(p_user_id, ...)` |
 | **Publish** | Fields changed by a method — tells `/implement` what the mutation's `pg_notify` payload should carry | Method publishes `name` → save function notifies with the updated name field |
+| **Notification** | Cross-document alert triggered by a method — channel, recipients, payload | `pg_notify` to a named channel with recipient user IDs |
 | **Auth** | Token-based WebSocket auth, public vs protected documents | Pre-auth via `POST /auth` (login/register), then `WS /ws?token=...` for everything else |
 | **Story** | User requirement that decomposes into the above | "As a member, I can send a message" |
 
@@ -57,7 +59,7 @@ Created with `bun create blueshed/simple <app-name>`.
 ## How Modeling Connects to Building
 
 ```
-bun model ... → bun model export-spec > spec.md → /implement
+bun model ... → bun model export > spec.md → /implement
 ```
 
 1. You model with the Easy CLI (this skill)
@@ -77,32 +79,61 @@ Always work top-down in this order:
 7. **Publish** — which fields does each method change? Determines the `pg_notify` payload
 8. **Story links** — connect each story to its artifacts
 9. **Checklists** — CAN/DENIED checks that verify permission enforcement (see guidance below)
-10. **Export** — `bun model export-spec` to generate the spec
+10. **Export** — `bun model export` to generate the spec
+
+## Schemas
+
+The CLI operates on 13 schema types. Each has a **natural key** used for upsert — saving the same natural key again updates the existing record.
+
+| Schema | Natural Key | Purpose |
+|---|---|---|
+| `entity` | name | Database tables |
+| `field` | entity, name | Entity columns |
+| `relation` | from, to, label | Relationships between entities |
+| `story` | actor, action | User stories |
+| `document` | name | Subscription units (client entry points) |
+| `expansion` | document, name | Children loaded with a document |
+| `method` | entity, name | RMI handlers on entities |
+| `publish` | method, property | Fields a method changes |
+| `notification` | method, channel | Cross-document alerts |
+| `permission` | method, path | FKEY path access controls |
+| `checklist` | name | Sequences of verifiable steps |
+| `check` | checklist, actor, method | Individual test steps |
+| `metadata` | key | Key-value project settings |
+
+## Nested Children
+
+Schemas that support inline children via save:
+
+- **entity** → `fields` (field[]), `methods` (method[])
+- **method** → `publishes` (string[] or publish[]), `permissions` (string[] or permission[]), `notifications` (notification[])
+- **document** → `expansions` (expansion[])
+- **expansion** → `expansions` (expansion[]) — for nesting
+- **story** → `links` (story_link[])
+- **checklist** → `checks` (check[])
+- **check** → `depends_on` (check_dep[])
+
+String shorthand: `publishes` and `permissions` accept plain strings that expand to `{"property": "name"}` and `{"path": "@user_id"}` respectively.
 
 ## Metadata
 
 The model database has a key-value metadata store for application-level information. Use it to capture anything that describes the app being built — theme, project name, target audience, etc.
 
 ```bash
-bun model set-meta theme "60s flower power — warm oranges, earthy browns, groovy rounded shapes"
-bun model set-meta name "My Chat App"
-bun model get-meta              # list all
-bun model clear-meta name       # remove a key
+bun model save metadata '{"key":"theme","value":"60s flower power — warm oranges, earthy browns, groovy rounded shapes"}'
+bun model save metadata '{"key":"name","value":"My Chat App"}'
+bun model list metadata          # list all
+bun model delete metadata '{"key":"name"}'  # remove a key
 ```
 
-The `set-theme` / `get-theme` / `clear-theme` shortcuts work for the `theme` key specifically.
-
-All metadata is included in `export-spec` output as a `## Metadata` section. The `/implement` skill reads the `theme` value (if present) to guide CSS generation. The Easy website displays all metadata on the Stories page.
+All metadata is included in `export` output as a `## Metadata` section. The `/implement` skill reads the `theme` value (if present) to guide CSS generation. The Easy website displays all metadata on the Stories page.
 
 ## Account Entity
 
 Simple's auth system provides a `user` table (id, name, email). In the model, represent this as an **Account** entity — you must add it before referencing it in relations or expansions:
 
 ```bash
-bun model add-entity Account
-bun model add-field Account id number
-bun model add-field Account name string
-bun model add-field Account email string
+bun model save entity '{"name":"Account","fields":[{"name":"id","type":"number"},{"name":"name","type":"string"},{"name":"email","type":"string"}]}'
 ```
 
 The `/implement` skill maps Account to the existing `user` table — it does not create a separate table.
@@ -180,7 +211,7 @@ Reads: "Take the entity's `owner_id`, look up `acts_for` rows where `org_id` mat
 ### CLI
 
 ```bash
-bun model add-permission Organisation.createVenue "@owner_id->acts_for[org_id=$]{active}.user_id" "User must be active member of the organisation"
+bun model save permission '{"method":"Organisation.createVenue","path":"@owner_id->acts_for[org_id=$]{active}.user_id","description":"User must be active member of the organisation"}'
 ```
 
 ## Checklists — Avoiding Overlap
@@ -190,7 +221,7 @@ Methods already capture permissions and publish as the **single source of truth*
 **DO use checklists for:**
 - **Denied paths** — proving someone *can't* do something (e.g. "user B cannot edit user A's post")
 - **Document-level behaviour** — what appears/disappears from collection queries after an action (e.g. "published post appears in PostFeed")
-- **Sequenced flows** — ordered multi-step scenarios using `--after` dependencies
+- **Sequenced flows** — ordered multi-step scenarios using `depends_on` dependencies
 - **Cross-cutting concerns** — behaviour that spans multiple methods or documents
 
 **AVOID in checklists:**

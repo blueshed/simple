@@ -82,8 +82,8 @@ PERFORM pg_notify('change', jsonb_build_object(
 
 ```bash
 bun run up
-bun model add-entity User ...
-bun model export-spec > spec.md
+bun model save entity '{"name":"User","fields":[{"name":"id","type":"number"},{"name":"name","type":"string"}]}'
+bun model export > spec.md
 # Now run /implement to build from the spec
 ```
 

@@ -75,5 +75,5 @@ Read these for detailed implementation guidance:
 1. `bun run up` to start postgres, Easy, and PlantUML
 2. `/model-app` to design your domain (or use `bun model ...` directly)
 3. Browse the model site at http://localhost:8080 to validate
-4. Export: `bun model export-spec > spec.md`
+4. Export: `bun model export > spec.md`
 5. `/implement` to build the app from the spec
