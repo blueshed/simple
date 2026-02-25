@@ -249,6 +249,10 @@ bun model save check '{"checklist":"Venue Setup","actor":"sponsor","method":"Ven
 
 # List
 bun model list checklist       # [A.] api only, [.U] ux only, [AU] both
+
+# Mark checks as verified (confirmed bitmask: 1=api, 2=ux, 3=both, 0=reset)
+bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","confirmed":1}'   # [A.]
+bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","confirmed":3}'   # [AU]
 ```
 
 ## Account Entity

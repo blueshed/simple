@@ -218,3 +218,48 @@ For nested collections (`"things.items"`), check that `notify.parent_id` is set 
 - **Each doc function**: returns the right shape, not-found raises
 - **Each mutation**: emits notify to clients that have the doc open, NOT to clients without it
 - **Each permission**: write operations from unauthorised user raise an exception
+
+## UX Tests — Playwright MCP
+
+When Playwright MCP tools are available, verify each checklist scenario in the browser. This earns `confirmed:2` (UX tested) — combined with API tests, checks become `confirmed:3` (both).
+
+### Prerequisites
+
+- The dev server is already running (the user starts it)
+- Playwright MCP uses `http://host.docker.internal:<port>` to reach the host machine — `localhost` does not work from inside Docker
+- Seed data must be loaded (`bun run db`) so test actors can log in
+
+### Approach
+
+Walk through each check from `bun model list check` as a browser flow:
+
+1. **Navigate** to the app: `browser_navigate` to `http://host.docker.internal:3000`
+2. **Log in** as the check's actor — find the login form, fill email/password, submit
+3. **Take a snapshot** with `browser_snapshot` to read the page structure (prefer snapshots over screenshots for verifying content)
+4. **Perform the action** — navigate to the right page, fill forms, click buttons
+5. **Verify the result**:
+   - For `action: "can"` checks — confirm the action succeeded (new item appears, field updated, navigation changed)
+   - For `action: "denied"` checks — confirm the action is blocked (error message shown, button disabled, or action not available in the UI)
+6. **Mark confirmed** — update the check with `confirmed:3` (or `confirmed:2` if only UX-testing without prior API tests)
+
+### Flow pattern
+
+For each actor in the checklists:
+
+```
+1. Navigate to app
+2. Log in as actor (email + password from seed data)
+3. Snapshot to confirm login succeeded
+4. For each check by this actor:
+   a. Navigate to the relevant page
+   b. Perform the action (or verify it's not available for denied checks)
+   c. Snapshot to verify the outcome
+5. Log out or navigate away before switching actors
+```
+
+### Key rules
+
+- **Snapshot, don't screenshot** — use `browser_snapshot` to read the accessibility tree. It's faster and gives you text content to verify against. Use `browser_take_screenshot` only when you need to verify visual layout.
+- **Wait for updates** — after a mutation, use `browser_wait_for` with the expected text before snapshotting. The reactive merge cycle needs a moment to update the DOM.
+- **One actor at a time** — log out or clear the session between actors to avoid cross-contamination.
+- **Use seed identities** — all actors must exist in `init_db/04_seed.sql` with known passwords. The seed should include users for each actor role in the checklists.

@@ -283,6 +283,24 @@ Refer to `.claude/docs/css.md` for token conventions and component scoping.
 
 If `spec.md` has a `## Metadata` section with a **theme** entry, use its description to guide colour choices, font selections, border styles, and overall mood. Translate the theme into CSS custom properties and component styles. If no theme entry exists, use sensible defaults.
 
+### 9. Test and verify
+
+Refer to `.claude/docs/testing.md` for test patterns and helpers.
+
+1. **Read the checklists** — run `bun model list check` to get the JSON list of all checks (actor, method, action, description). Use these as your test cases.
+2. **Write integration tests** in `server.test.ts` — cover each mutation, doc function, and permission check from the checklists. `action: "can"` checks prove the actor succeeds; `action: "denied"` checks prove the actor is blocked.
+3. **Run tests** with `bun test` — fix any failures before proceeding
+4. **Update checklists** — for each check that passes, mark it as API-tested:
+
+```bash
+bun model save check '{"checklist":"<name>","actor":"<actor>","method":"<Entity.method>","confirmed":1}'
+```
+
+The `confirmed` field is a bitmask: `1` = API tested `[A.]`, `2` = UX tested `[.U]`, `3` = both `[AU]`, `0` = untested `[..]`. Save upserts by natural key (`checklist` + `actor` + `method`).
+
+5. **UX test** — if Playwright MCP tools are available (`browser_navigate`, `browser_snapshot`, etc.), walk through each checklist scenario in the browser. Log in as the actor, perform the action, verify the result via snapshots. For checks that pass both API and UX, update to `confirmed:3`. See `.claude/docs/testing.md` "UX Tests — Playwright MCP" for the full approach.
+6. **Verify** — run `bun model list checklist` to confirm all checks show `[A.]` or `[AU]` and the counters match.
+
 ## Key rules
 
 - **Atomic updates** — the whole architecture is `mutation → notify → merge → effect → patch`. Effects must make targeted DOM changes (set textContent, append a node, remove a node). Never replace innerHTML of a container in an effect. Never re-fetch a document after a mutation. The merge cycle delivers the delta — trust it.
