@@ -1,13 +1,13 @@
-# Client (`session.ts` + `signals.ts`)
+# Client (`lib/session.ts` + `lib/signals.ts`)
 
 Zero-dependency browser client. No framework, no bundler — Bun serves TypeScript directly from `index.html`.
 
-## Session (`session.ts`)
+## Session (`lib/session.ts`)
 
 ### Auth Lifecycle
 
 ```typescript
-import { auth, getToken, logout, TOKEN_KEY } from "./session";
+import { auth, getToken, logout, TOKEN_KEY } from "./lib/session";
 
 // TOKEN_KEY — namespaced sessionStorage key (e.g. "myapp:token", substituted by setup.ts)
 
@@ -27,7 +27,7 @@ HTTP POST to `/auth` for pre-auth calls (login, register). Stores the token in `
 There is **one WebSocket per app**, shared by all components. Never call `connect()` directly from a component.
 
 ```typescript
-import { initSession, getSession, clearSession } from "./session";
+import { initSession, getSession, clearSession } from "./lib/session";
 
 // In app.ts — once after login:
 const session = initSession(token);
@@ -46,8 +46,8 @@ clearSession();
 Components must not mount until the WebSocket is open **and** the profile has arrived. Wire this in `app.ts` using a `sessionReady` signal:
 
 ```typescript
-import { signal, effect } from "./signals";
-import { initSession, clearSession, getToken } from "./session";
+import { signal, effect } from "./lib/signals";
+import { initSession, clearSession, getToken } from "./lib/session";
 
 const sessionReady = signal(false);
 
@@ -214,7 +214,7 @@ Used by cursor pagination and streaming. The data has the same shape as the doc 
 - `loadMore()` responses merged back into the signal
 - Notifications for items that might overlap with a pending page load
 
-## Signals (`signals.ts`)
+## Signals (`lib/signals.ts`)
 
 Custom reactive primitives — no external dependencies.
 
@@ -299,8 +299,8 @@ App code lives in `components/`. Each component is a custom element using `conne
 ### Pattern: entity document
 
 ```typescript
-import { getSession } from "../session";
-import { effect } from "../signals";
+import { getSession } from "../lib/session";
+import { effect } from "../lib/signals";
 
 class AppThing extends HTMLElement {
   private disposers: (() => void)[] = [];

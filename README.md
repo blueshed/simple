@@ -43,18 +43,19 @@ Client                    Server                  Postgres
 
 | File | What to do |
 |------|------------|
-| `server-core.ts` | Generic WebSocket relay — **do not edit** |
-| `session.ts` | Generic WebSocket client — **do not edit** |
-| `signals.ts` | Generic reactive primitives — **do not edit** |
+| `lib/server-core.ts` | Generic WebSocket relay — **do not edit** |
+| `lib/session.ts` | Generic WebSocket client — **do not edit** |
+| `lib/signals.ts` | Generic reactive primitives — **do not edit** |
+| `lib/claude-helper.ts` | Optional `/claude.js` route for browser automation, enabled by `RUNTIME_CLAUDE=true` — **do not edit** |
 | `server.ts` | Your app entry point — configure `preAuth`, `profileFn`, custom routes |
-| `claude-helper.ts` | Optional `/claude.js` route for browser automation, enabled by `RUNTIME_CLAUDE=true` — **do not edit** |
 | `bunfig.toml` | Bun config — inlines `RUNTIME_*` env vars into client code — **do not edit** |
 | `app.ts` | Your client routing — add/rename routes |
 | `index.html` | HTML shell — update title |
 | `styles.css` | CSS tokens — customise colours/fonts |
 | `components/app-login.ts` | Login/register form — adapt to your register() signature |
 | `components/app-home.ts` | Authenticated shell — add your doc calls and UI |
-| `cli.ts` | Generic DB function caller — `bun run api <fn> [args]` |
+| `lib/cli.ts` | Generic DB function caller — `bun run api <fn> [args]` — **do not edit** |
+| `lib/migrate.ts` | Migration runner — **do not edit** |
 | `setup.ts` | Post-create substitution — runs once then self-deletes |
 | `init_db/00_extensions.sql` | Token crypto — update database name |
 | `init_db/01_schema.sql` | Auth tables + your domain tables |

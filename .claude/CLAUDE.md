@@ -6,11 +6,11 @@ A minimal full-stack pattern: postgres owns everything, the server routes, the c
 
 | File | What to do |
 |------|------------|
-| `server-core.ts` | Generic WebSocket relay — **do not edit** |
-| `session.ts` | Generic WebSocket client — **do not edit** |
-| `signals.ts` | Generic reactive primitives — **do not edit** |
+| `lib/server-core.ts` | Generic WebSocket relay — **do not edit** |
+| `lib/session.ts` | Generic WebSocket client — **do not edit** |
+| `lib/signals.ts` | Generic reactive primitives — **do not edit** |
+| `lib/claude-helper.ts` | Optional `/claude.js` route for browser automation, enabled by `RUNTIME_CLAUDE=true` — **do not edit** |
 | `server.ts` | Your app entry point — configure `preAuth`, `profileFn`, custom routes |
-| `claude-helper.ts` | Optional `/claude.js` route for browser automation, enabled by `RUNTIME_CLAUDE=true` — **do not edit** |
 | `bunfig.toml` | Bun config — inlines `RUNTIME_*` env vars into client code — **do not edit** |
 | `app.ts` | Your client routing — add/rename routes |
 | `index.html` | HTML shell — update title |
@@ -22,7 +22,8 @@ A minimal full-stack pattern: postgres owns everything, the server routes, the c
 | `init_db/02_auth.sql` | Auth functions — **do not edit** unless you need custom auth |
 | `init_db/03_functions.sql` | Your doc functions and mutations |
 | `init_db/04_seed.sql` | Dev seed data |
-| `migrate.ts` | Migration runner — **do not edit** |
+| `lib/migrate.ts` | Migration runner — **do not edit** |
+| `lib/cli.ts` | Generic DB function caller — `bun run api <fn> [args]` — **do not edit** |
 | `migrations/` | Your numbered SQL migration files |
 
 ## Pattern

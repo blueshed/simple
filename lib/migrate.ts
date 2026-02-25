@@ -1,7 +1,7 @@
 import postgres from "postgres";
 import { database_url } from "./server-core";
 
-const MIGRATIONS_DIR = `${import.meta.dir}/migrations`;
+const MIGRATIONS_DIR = `${import.meta.dir}/../migrations`;
 
 const sql = postgres(database_url);
 

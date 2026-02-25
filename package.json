@@ -1,15 +1,15 @@
 {
   "name": "myapp",
-  "simple": "0.1.7",
+  "simple": "0.1.8",
   "scripts": {
     "up": "docker compose up -d --wait",
     "down": "docker compose down -v",
     "db": "bun run down && bun run up",
     "dev": "bun --watch server.ts",
-    "api": "bun run cli.ts",
+    "api": "bun run lib/cli.ts",
     "health": "docker compose exec postgres pg_isready -U postgres -d myapp",
     "logs": "docker compose logs postgres",
-    "migrate": "bun migrate.ts",
+    "migrate": "bun lib/migrate.ts",
     "model": "docker compose exec easy bun model",
     "postinstall": "test -f setup.ts && bun setup.ts || true"
   },

@@ -2,8 +2,8 @@
 // Uses getSession() to access the shared WebSocket session.
 // Replace the body with your own doc calls and UI.
 
-import { getSession, logout } from "../session";
-import { effect } from "../signals";
+import { getSession, logout } from "../lib/session";
+import { effect } from "../lib/signals";
 
 class AppHome extends HTMLElement {
   private disposers: (() => void)[] = [];

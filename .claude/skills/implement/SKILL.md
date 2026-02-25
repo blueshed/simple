@@ -195,8 +195,8 @@ mutation → pg_notify → merge into signal → effect re-runs → patch specif
 4. **Never re-fetch a document after mutation** — the notify/merge cycle handles it automatically
 
 ```typescript
-import { getSession } from "../session";
-import { effect } from "../signals";
+import { getSession } from "../lib/session";
+import { effect } from "../lib/signals";
 
 class AppThing extends HTMLElement {
   private disposers: (() => void)[] = [];
@@ -289,7 +289,7 @@ If `spec.md` has a `## Metadata` section with a **theme** entry, use its descrip
 - **KISS** — keep it simple. Don't over-engineer. Write the minimum code that satisfies the spec. Prefer flat over nested, obvious over clever, fewer files over more.
 - **DRY** — don't repeat yourself. If two mutations share the same permission check, extract a helper. If two components render lists the same way, factor out the pattern. If SQL functions share subqueries, use views or CTEs.
 - **Read before writing** — always read existing files before modifying them. Don't duplicate code that already exists. Don't rewrite files that only need a few lines added.
-- **Never edit** `server-core.ts`, `session.ts`, `signals.ts` — these are infrastructure.
+- **Never edit** `lib/server-core.ts`, `lib/session.ts`, `lib/signals.ts` — these are infrastructure.
 - **Never edit** `init_db/02_auth.sql` unless auth needs customization.
 - The `user` table already exists — map the spec's Account entity to it.
 - Every mutation function's first parameter is `p_user_id INT` — the server injects it.

@@ -1,5 +1,5 @@
-import { signal, effect, routes } from "./signals";
-import { initSession, clearSession, getSession, getToken } from "./session";
+import { signal, effect, routes } from "./lib/signals";
+import { initSession, clearSession, getSession, getToken } from "./lib/session";
 import "./components/app-login";
 import "./components/app-home";
 

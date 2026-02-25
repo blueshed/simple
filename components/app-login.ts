@@ -1,7 +1,7 @@
 // app-login — handles pre-auth: register and login.
 // Fires a CustomEvent("authenticated") when the user has a token.
 
-import { auth } from "../session";
+import { auth } from "../lib/session";
 
 class AppLogin extends HTMLElement {
   connectedCallback() {

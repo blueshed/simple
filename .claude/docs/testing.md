@@ -12,7 +12,7 @@ bun test server.test.ts           # integration tests only
 
 ## Unit Tests — `signals.test.ts`
 
-Tests the reactive primitives and routing helpers in `signals.ts`. Pure in-memory, no I/O.
+Tests the reactive primitives and routing helpers in `lib/signals.ts`. Pure in-memory, no I/O.
 
 | Block | What it covers |
 |-------|----------------|
@@ -23,7 +23,7 @@ Tests the reactive primitives and routing helpers in `signals.ts`. Pure in-memor
 | `matchRoute` | static paths, params, URI decoding |
 | `effect depth limit` | infinite loop detection |
 
-`signals.ts` is infrastructure — copy `signals.test.ts` verbatim from any simple-based project. It tests the generic reactive layer, not your app.
+`lib/signals.ts` is infrastructure — copy `signals.test.ts` verbatim from any simple-based project. It tests the generic reactive layer, not your app.
 
 ## Integration Tests — `server.test.ts`
 

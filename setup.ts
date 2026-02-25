@@ -15,9 +15,9 @@ if (name === "myapp") {
 const files = [
   "compose.yml",
   "package.json",
-  "server-core.ts",
+  "lib/server-core.ts",
   "init_db/00_extensions.sql",
-  "session.ts",
+  "lib/session.ts",
 ];
 
 for (const path of files) {

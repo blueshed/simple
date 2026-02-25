@@ -1,4 +1,4 @@
-# Server (`server-core.ts`)
+# Server (`lib/server-core.ts`)
 
 A thin real-time relay between web clients and postgres. The server does not validate business rules — postgres handles all permission checks, type coercion, and mutation logic.
 
@@ -22,7 +22,7 @@ createServer({
 Pass additional HTTP routes via the `routes` config. They are spread into the Bun route map alongside the built-in `/`, `/auth`, and `/ws` routes.
 
 ```typescript
-import { claudeHelperRoute } from "./claude-helper";
+import { claudeHelperRoute } from "./lib/claude-helper";
 
 const preAuth = ["login", "register"];
 
