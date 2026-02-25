@@ -38,8 +38,9 @@ export function connect(token: string) {
   }
 
   function open() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(
-      `ws://${location.host}/ws?token=${encodeURIComponent(token)}`,
+      `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`,
     );
     status.set("connecting...");
     ws.onopen = () => {
