@@ -11,7 +11,7 @@ Decompose application requirements into [Simple](https://github.com/blueshed/sim
 > `bun model` resolves to `docker compose exec easy bun model` via the `model` script in package.json — it runs inside the Easy container.
 
 **Important**:
-- The CLI uses **7 generic commands** (`save`, `delete`, `list`, `get`, `export`, `doctor`, `batch`) operating on **13 schemas**. All data is passed as **JSON objects**.
+- The CLI uses **8 commands** (`save`, `delete`, `list`, `get`, `export`, `doctor`, `batch`, `import`) operating on **13 schemas**. All data is passed as **JSON objects**.
 - **Run commands individually**, not in batch. Each command should be a separate `bun model` call so you can see errors immediately and fix them before proceeding. Only use `bun model batch` for large bulk imports where you've already verified the syntax.
 - Save uses **coalescing upsert** by natural key — only provided fields are updated, missing fields are left unchanged. This means you can update a single field without re-specifying everything.
 
@@ -34,6 +34,14 @@ Then try again.
 ```
 
 Do not proceed with modeling until both containers are running.
+
+Once containers are confirmed running, fetch the latest CLI documentation:
+
+```bash
+curl -s http://localhost:8080/api/ai
+```
+
+This returns the authoritative modeling guide and CLI reference from the Easy container. Read its output carefully before proceeding — it contains the full schema reference, examples, and decomposition workflow.
 
 ## What is Simple?
 
@@ -230,4 +238,4 @@ Methods already capture permissions and publish as the **single source of truth*
 
 When in doubt, ask: "Is this already expressed on a method?" If yes, don't add a checklist check for it.
 
-For full CLI reference and detailed examples, see [reference.md](reference.md).
+For full CLI reference and detailed examples, run `curl -s http://localhost:8080/api/ai` (already fetched in the "Before you start" step above).

@@ -17,7 +17,7 @@ bun model ...  →  bun model export > spec.md  →  /implement
 
 ## CLI Quick Reference
 
-The CLI has **7 commands** operating on **13 schemas**. All data is passed as JSON objects. Save uses coalescing upsert by natural key.
+The CLI has **8 commands** operating on **13 schemas**. All data is passed as JSON objects. Save uses coalescing upsert by natural key.
 
 ```
 bun model save <schema> '<json>'       Upsert by natural key
@@ -27,6 +27,7 @@ bun model get <schema> <key>           Get one item as JSON
 bun model export                       Markdown spec to stdout
 bun model doctor [--fix]               Report/repair orphans
 bun model batch                        JSONL from stdin
+bun model import <file.yml|json>       Import YAML or JSON file
 ```
 
 ### Stories
@@ -179,6 +180,38 @@ cat <<'EOF' | bun model batch
 EOF
 ```
 
+### Import from File
+
+Import a YAML or JSON file containing model definitions. Plural keys (e.g. `entities`, `stories`) are automatically mapped to singular schema names. All items are saved in a single transaction — if any item fails, the entire import is rolled back.
+
+```bash
+bun model import model.yml
+bun model import model.json
+```
+
+Example YAML file:
+```yaml
+entities:
+  - name: Room
+    fields:
+      - { name: id, type: number }
+      - { name: name, type: string }
+  - name: Message
+    fields:
+      - { name: id, type: number }
+      - { name: text, type: string }
+      - { name: room_id, type: number }
+
+relations:
+  - { from: Room, to: Message, label: messages, cardinality: "*" }
+
+documents:
+  - name: RoomDoc
+    entity: Room
+    expansions:
+      - { name: messages, entity: Message, foreign_key: room_id }
+```
+
 ## Checklists
 
 Checklists verify permission enforcement — that the right actors can call methods and the wrong actors are blocked.
@@ -210,6 +243,9 @@ bun model save checklist '{"name":"Venue Setup","description":"Owner creates and
 bun model save checklist '{"name":"Venue Setup","description":"Owner creates and manages venue"}'
 bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","description":"Add an area"}'
 bun model save check '{"checklist":"Venue Setup","actor":"sponsor","method":"Venue.addArea","description":"Sponsor cannot add area","denied":true}'
+
+# Alternative: use action field instead of denied boolean
+bun model save check '{"checklist":"Venue Setup","actor":"sponsor","method":"Venue.addArea","description":"Sponsor cannot add area","action":"denied"}'
 
 # List
 bun model list checklist       # [A.] api only, [.U] ux only, [AU] both

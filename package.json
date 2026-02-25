@@ -1,6 +1,6 @@
 {
   "name": "myapp",
-  "simple": "0.1.10",
+  "simple": "0.1.11",
   "scripts": {
     "up": "docker compose up -d --wait",
     "down": "docker compose down -v",
