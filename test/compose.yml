@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: myapp
+    ports:
+      - "5433:5432"
+    volumes:
+      - ../init_db/00_extensions.sql:/docker-entrypoint-initdb.d/00_extensions.sql:ro
+      - ../init_db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ../init_db/02_auth.sql:/docker-entrypoint-initdb.d/02_auth.sql:ro
+      - ../init_db/03_functions.sql:/docker-entrypoint-initdb.d/03_functions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myapp"]
+      interval: 2s
+      timeout: 5s
+      retries: 10

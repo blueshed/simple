@@ -24,6 +24,8 @@ const files = [
   "compose.yml",
   "package.json",
   "init_db/00_extensions.sql",
+  "test/compose.yml",
+  "test/server.test.ts",
 ];
 
 for (const path of files) {
