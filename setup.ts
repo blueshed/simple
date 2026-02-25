@@ -6,18 +6,24 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync, statSync, rmSync }
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const name = pkg.name as string; // bun create sets this to basename(destination)
 
+// Write .env (always, even for template dev)
+writeFileSync(".env", [
+  `DATABASE_URL=postgres://postgres:secret@localhost:5432/${name}`,
+  `RUNTIME_TOKEN_KEY=${name}:token`,
+  `RUNTIME_CLAUDE=false`,
+  "",
+].join("\n"));
+console.log(`✓ .env`);
+
 if (name === "myapp") {
-  console.log("ℹ  Project name is 'myapp' — skipping substitution.");
-  console.log("   Run: bun setup.ts  after renaming if needed.\n");
+  console.log("ℹ  Project name is 'myapp' — skipping remaining substitution.");
   process.exit(0);
 }
 
 const files = [
   "compose.yml",
   "package.json",
-  "lib/server-core.ts",
   "init_db/00_extensions.sql",
-  "lib/session.ts",
 ];
 
 for (const path of files) {

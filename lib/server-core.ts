@@ -1,8 +1,7 @@
 import postgres from "postgres";
 import type { ServerWebSocket } from "bun";
 
-export const database_url =
-  process.env.DATABASE_URL ?? `postgres://postgres:secret@localhost:5432/myapp`;
+export const database_url = process.env.DATABASE_URL!;
 
 type WS = ServerWebSocket<{ user_id: number; docs: Set<string> }>;
 

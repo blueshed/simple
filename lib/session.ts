@@ -310,8 +310,8 @@ export function clearSession(): void {
   _session = null;
 }
 
-// Token key namespaced by app name (substituted by setup.ts)
-export const TOKEN_KEY = "myapp:token";
+// Token key namespaced by app name (set in .env as RUNTIME_TOKEN_KEY, inlined by bunfig)
+export const TOKEN_KEY = process.env.RUNTIME_TOKEN_KEY || "app:token";
 
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);

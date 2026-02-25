@@ -12,7 +12,7 @@ createServer({
   profileFn:  string;    // postgres function called on connect: profileFn(user_id)
   index:      Response;  // the HTML bundle to serve at /
   port?:      number;    // default: process.env.PORT || 3000
-  databaseUrl?: string;  // default: DATABASE_URL env, or postgres://postgres:secret@localhost:5432/myapp (substituted by setup.ts)
+  databaseUrl?: string;  // default: DATABASE_URL from .env
   routes?:    Record<string, (req: Request) => Response | Promise<Response>>;  // custom HTTP routes
 })
 ```

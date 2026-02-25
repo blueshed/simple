@@ -9,7 +9,7 @@ Zero-dependency browser client. No framework, no bundler — Bun serves TypeScri
 ```typescript
 import { auth, getToken, logout, TOKEN_KEY } from "./lib/session";
 
-// TOKEN_KEY — namespaced sessionStorage key (e.g. "myapp:token", substituted by setup.ts)
+// TOKEN_KEY — namespaced sessionStorage key (e.g. "myapp:token", set via RUNTIME_TOKEN_KEY in .env)
 
 await auth("login", [email, password]);    // POST /auth, stores token in sessionStorage
 await auth("register", [name, email, pw]); // same for register
