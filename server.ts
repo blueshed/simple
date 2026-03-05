@@ -5,7 +5,7 @@ import { createServer } from "./lib/server-core";
 import { claudeHelperRoute } from "./lib/claude-helper";
 import index from "./index.html";
 
-const preAuth = ["login", "register"];
+const preAuth = ["login", "register", "refresh_token"];
 
 createServer({
   preAuth,

@@ -33,6 +33,7 @@ For each entity in the spec (skip Account — that maps to the existing `user` t
 - Fields ending in `_id` are foreign keys — add `REFERENCES`.
 - `id` is always `SERIAL PRIMARY KEY`.
 - `created_at` / `updated_at` use `TIMESTAMPTZ NOT NULL DEFAULT now()`.
+- If the entity has a `version` field in the spec, add `version INT NOT NULL DEFAULT 1`. This enables optimistic concurrency control — see `.claude/docs/database.md` "Optimistic Concurrency Control".
 - Add indexes on foreign keys used in queries.
 
 ### 2. Doc functions (`init_db/03_functions.sql`)
@@ -68,6 +69,16 @@ For each **method** in the spec, create a postgres function following the four-s
 - Methods that update fields (publishes): `save_<entity>` with nullable field params
 - Methods that delete: `remove_<entity>`
 - Custom methods: use the method name as the function name (e.g. `publish_post`)
+
+#### Optimistic concurrency (version check)
+
+If the entity has a `version` column:
+
+- **save function**: add `p_version INT DEFAULT NULL` parameter. For UPDATEs, include `AND (p_version IS NULL OR version = p_version)` in the WHERE clause and `version = version + 1` in the SET clause. If `v_row IS NULL` after the UPDATE, check whether the row exists to distinguish `'not found'` from `'version conflict'`.
+- **remove function**: add `p_version INT DEFAULT NULL` parameter. When provided, include `AND (p_version IS NULL OR version = p_version)` in the DELETE WHERE clause. Same conflict detection pattern.
+- **notify data**: include `version` in the data payload (it comes through naturally via `row_to_json`).
+
+See `.claude/docs/database.md` "Optimistic Concurrency Control" for the full pattern.
 
 #### Input validation
 
@@ -145,7 +156,7 @@ Create realistic seed data that exercises the stories. Include at least:
 
 Refer to `.claude/docs/server.md` for the `createServer` config shape.
 
-No changes needed unless the spec has pre-auth methods beyond login/register/accept_invite.
+No changes needed unless the spec has pre-auth methods beyond login/register/refresh_token/accept_invite.
 
 ### 6. App entry point (`app.ts`)
 

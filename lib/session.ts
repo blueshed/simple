@@ -27,6 +27,9 @@ export function connect(token: string) {
   let ws: WebSocket;
   let delay = 1000;
   const queue: string[] = [];
+  let currentToken = token;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshing: Promise<string | null> | null = null;
 
   function send(msg: object) {
     const str = JSON.stringify(msg);
@@ -37,26 +40,60 @@ export function connect(token: string) {
     }
   }
 
+  function scheduleRefresh() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    const expiresAt = Number(sessionStorage.getItem(EXPIRES_KEY) || 0);
+    if (!expiresAt) return;
+    const msUntilRefresh = expiresAt - Date.now() - 5 * 60 * 1000; // 5 min before expiry
+    if (msUntilRefresh <= 0) {
+      doRefresh();
+      return;
+    }
+    refreshTimer = setTimeout(doRefresh, msUntilRefresh);
+  }
+
+  async function doRefresh() {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      currentToken = newToken;
+      scheduleRefresh();
+    } else {
+      clearTokens();
+      location.hash = "/";
+    }
+  }
+
   function open() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(
-      `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`,
+      `${proto}://${location.host}/ws?token=${encodeURIComponent(currentToken)}`,
     );
     status.set("connecting...");
     ws.onopen = () => {
       status.set("connected");
       delay = 1000;
       while (queue.length) ws.send(queue.shift()!);
+      scheduleRefresh();
     };
     ws.onclose = (e) => {
       status.set("disconnected");
       for (const p of pending.values()) p.reject(new Error("disconnected"));
       pending.clear();
-      // 4001 = invalid token — clear storage and go to login instead of retrying
-      // 1006 before profile arrives = connection failed before auth completed
+      if (refreshTimer) clearTimeout(refreshTimer);
+      // 4001 = invalid token, 1006 before profile = connection failed before auth
       if (e.code === 4001 || (!profile.peek() && e.code === 1006)) {
-        sessionStorage.removeItem(TOKEN_KEY);
-        location.hash = "/";
+        // Try refreshing before giving up
+        refreshAccessToken().then((newToken) => {
+          if (newToken) {
+            currentToken = newToken;
+            scheduleRefresh();
+            delay = 1000;
+            open();
+          } else {
+            clearTokens();
+            location.hash = "/";
+          }
+        });
         return;
       }
       setTimeout(open, delay);
@@ -313,9 +350,17 @@ export function clearSession(): void {
 
 // Token key namespaced by app name (set in .env as RUNTIME_TOKEN_KEY, inlined by bunfig)
 export const TOKEN_KEY = process.env.RUNTIME_TOKEN_KEY || "app:token";
+export const REFRESH_KEY = TOKEN_KEY + ":refresh";
+export const EXPIRES_KEY = TOKEN_KEY + ":expires";
 
 export function getToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
+}
+
+function clearTokens(): void {
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_KEY);
+  sessionStorage.removeItem(EXPIRES_KEY);
 }
 
 export async function auth(
@@ -330,10 +375,46 @@ export async function auth(
   const body = await res.json();
   if (!body.ok) throw new Error(body.error);
   sessionStorage.setItem(TOKEN_KEY, body.data.token);
+  if (body.data.refreshToken) {
+    sessionStorage.setItem(REFRESH_KEY, body.data.refreshToken);
+  }
+  if (body.data.expiresIn) {
+    const expiresAt = Date.now() + body.data.expiresIn * 1000;
+    sessionStorage.setItem(EXPIRES_KEY, String(expiresAt));
+  }
   return { token: body.data.token, profile: body.data.profile };
 }
 
+export async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch("/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fn: "refresh_token", args: [refreshToken] }),
+    });
+    const body = await res.json();
+    if (!body.ok) return null;
+    sessionStorage.setItem(TOKEN_KEY, body.data.token);
+    if (body.data.refreshToken) {
+      sessionStorage.setItem(REFRESH_KEY, body.data.refreshToken);
+    }
+    if (body.data.expiresIn) {
+      sessionStorage.setItem(EXPIRES_KEY, String(Date.now() + body.data.expiresIn * 1000));
+    }
+    return body.data.token;
+  } catch {
+    return null;
+  }
+}
+
 export function logout(): void {
-  sessionStorage.removeItem(TOKEN_KEY);
+  // Best-effort server-side revocation
+  try {
+    const session = getSession();
+    session.api.revoke_refresh_tokens();
+  } catch { /* session may not exist */ }
+  clearTokens();
   location.hash = "/";
 }

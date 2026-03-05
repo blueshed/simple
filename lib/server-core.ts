@@ -96,8 +96,11 @@ export function createServer(config: {
           if (server.upgrade(req, { data: { user_id, docs: new Set() } }))
             return;
           return new Response("upgrade failed", { status: 500 });
-        } catch {
-          return new Response("invalid token", { status: 401 });
+        } catch (e: any) {
+          const msg = e?.message?.includes("expired")
+            ? "token expired"
+            : "invalid token";
+          return new Response(msg, { status: 401 });
         }
       },
     },

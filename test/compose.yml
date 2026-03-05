@@ -12,6 +12,7 @@ services:
       - ../init_db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ../init_db/02_auth.sql:/docker-entrypoint-initdb.d/02_auth.sql:ro
       - ../init_db/03_functions.sql:/docker-entrypoint-initdb.d/03_functions.sql:ro
+      - ./05_test_fixtures.sql:/docker-entrypoint-initdb.d/05_test_fixtures.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d myapp"]
       interval: 2s

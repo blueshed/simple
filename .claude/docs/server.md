@@ -8,7 +8,7 @@ A thin real-time relay between web clients and postgres. The server does not val
 
 ```typescript
 createServer({
-  preAuth:    string[];   // functions callable without a token (e.g. ["login", "register"])
+  preAuth:    string[];   // functions callable without a token (e.g. ["login", "register", "refresh_token"])
   profileFn:  string;    // postgres function called on connect: profileFn(user_id)
   index:      Response;  // the HTML bundle to serve at /
   port?:      number;    // default: process.env.PORT || 3000
@@ -24,7 +24,7 @@ Pass additional HTTP routes via the `routes` config. They are spread into the Bu
 ```typescript
 import { claudeHelperRoute } from "./lib/claude-helper";
 
-const preAuth = ["login", "register"];
+const preAuth = ["login", "register", "refresh_token"];
 
 createServer({
   preAuth,
@@ -52,8 +52,8 @@ Start with: `RUNTIME_CLAUDE=true bun run dev`
 ```
 Client (browser)
   │
-  ├─ POST /auth ──────────→ preAuth functions (login, register, ...)
-  │                          returns { token, ...profile }
+  ├─ POST /auth ──────────→ preAuth functions (login, register, refresh_token, ...)
+  │                          returns { token, refreshToken, expiresIn, ...profile }
   │
   └─ WS /ws?token=... ───→ authenticated session
        ├─ send { id, fn, args }              →  SELECT fn(user_id, ...args) AS result
@@ -69,7 +69,7 @@ Client (browser)
 
 ### Connection
 
-Client connects to `ws://{host}/ws?token={token}`. The server verifies the token via `_verify_token(token)`, upgrades the connection storing `{ user_id, docs: Set<string> }`, then sends the profile:
+Client connects to `ws://{host}/ws?token={token}`. The server verifies the token via `_verify_token(token)` — if the token has expired, it returns `"token expired"` (401); if invalid, `"invalid token"` (401). On success, upgrades the connection storing `{ user_id, docs: Set<string> }`, then sends the profile:
 
 ```json
 { "type": "profile", "data": { "id": 1, "name": "Alice", ... } }

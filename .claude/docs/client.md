@@ -7,20 +7,27 @@ Zero-dependency browser client. No framework, no bundler — Bun serves TypeScri
 ### Auth Lifecycle
 
 ```typescript
-import { auth, getToken, logout, TOKEN_KEY } from "./lib/session";
+import { auth, getToken, logout, refreshAccessToken, TOKEN_KEY, REFRESH_KEY, EXPIRES_KEY } from "./lib/session";
 
 // TOKEN_KEY — namespaced sessionStorage key (e.g. "myapp:token", set via RUNTIME_TOKEN_KEY in .env)
+// REFRESH_KEY — TOKEN_KEY + ":refresh"
+// EXPIRES_KEY — TOKEN_KEY + ":expires"
 
-await auth("login", [email, password]);    // POST /auth, stores token in sessionStorage
+await auth("login", [email, password]);    // POST /auth, stores token + refreshToken + expiresIn
 await auth("register", [name, email, pw]); // same for register
 
-getToken();   // returns stored token or null
-logout();     // clears token, navigates to "/"
+getToken();              // returns stored access token or null
+refreshAccessToken();    // exchanges refresh token for new access token (returns token or null)
+logout();                // revokes refresh tokens server-side, clears all stored tokens, navigates to "/"
 ```
 
 ### `auth(fn, args)`
 
-HTTP POST to `/auth` for pre-auth calls (login, register). Stores the token in `sessionStorage` and returns `{ token, profile }`.
+HTTP POST to `/auth` for pre-auth calls (login, register, refresh_token). Stores the access token, refresh token, and expiry in `sessionStorage`. Returns `{ token, profile }`.
+
+### `refreshAccessToken()`
+
+Calls `refresh_token` via `/auth` using the stored refresh token. On success, stores the new access token, refresh token, and expiry. Returns the new token or `null` on failure. Refresh tokens are single-use (rotation) — the old one is revoked server-side.
 
 ### Session Singleton
 
@@ -111,7 +118,9 @@ Establishes a WebSocket session. Returns:
 
 **Reconnect**: exponential backoff on close, max 30s.
 
-**Token errors**: close code `4001` (invalid token) or `1006` before profile arrives clears the stored token and navigates to `/` instead of retrying.
+**Token expiry**: the client schedules a refresh 5 minutes before the access token expires. On successful refresh, the WebSocket continues uninterrupted. If the refresh fails (e.g. refresh token expired after 7 days), the user is redirected to login.
+
+**Token errors**: close code `4001` (invalid token) or `1006` before profile arrives triggers a refresh attempt first. If the refresh succeeds, reconnects with the new token. If it fails, clears all stored tokens and navigates to `/`.
 
 ### `openDoc(fn, id, data, opts?)`
 

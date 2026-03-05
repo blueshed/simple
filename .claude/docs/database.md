@@ -8,9 +8,9 @@ Files in `init_db/` run in alphabetical order on first container boot:
 
 | File | Purpose |
 |------|---------|
-| `00_extensions.sql` | pgcrypto, token secret, `_make_token`, `_verify_token` |
-| `01_schema.sql` | Auth tables + your domain tables |
-| `02_auth.sql` | `profile_doc`, `register`, `login`, `accept_invite` |
+| `00_extensions.sql` | pgcrypto, token GUCs, `_make_token`, `_verify_token` |
+| `01_schema.sql` | Auth tables, `_refresh_token` table, your domain tables |
+| `02_auth.sql` | `profile_doc`, `register`, `login`, `refresh_token`, `revoke_refresh_tokens` |
 | `03_functions.sql` | Your doc functions and mutations |
 | `04_seed.sql` | Dev seed data |
 
@@ -18,15 +18,36 @@ Files in `init_db/` run in alphabetical order on first container boot:
 
 Pre-auth — called via `POST /auth`, no `user_id` parameter.
 
-**`register(name, email, password)`** — creates user, returns `{ token, profile }`
+**`register(name, email, password)`** — creates user, returns `{ token, refreshToken, expiresIn, profile }`
 
-**`login(email, password)`** — verifies credentials, returns `{ token, profile }`
+**`login(email, password)`** — verifies credentials, returns `{ token, refreshToken, expiresIn, profile }`
 
-**`accept_invite(name, email, password, key)`** — joins via invite, returns `{ token, profile }`
+**`refresh_token(refresh_token_string)`** — preAuth; validates and rotates refresh token, returns `{ token, refreshToken, expiresIn }`
+
+**`revoke_refresh_tokens(user_id)`** — authed; revokes all active refresh tokens for the user (called on logout)
 
 ### Token Mechanism
 
-`_make_token(user_id)` / `_verify_token(token)` — symmetric encryption via `pgp_sym_encrypt`. The secret is a database-level GUC (`app.token_secret`). Both functions are private (`_` prefix — blocked by the server).
+`_make_token(user_id)` encrypts `user_id:expires_epoch` via `pgp_sym_encrypt`. The access token TTL is controlled by `app.access_token_ttl` (default 3600s / 1 hour).
+
+`_verify_token(token)` decrypts and checks expiry. Raises `'token expired'` (distinct from `'invalid token'`) when past TTL. Legacy tokens without expiry are accepted for backward compatibility.
+
+Both functions are private (`_` prefix — blocked by the server).
+
+### Refresh Tokens
+
+The `_refresh_token` table stores opaque refresh tokens (7-day TTL, controlled by `app.refresh_token_ttl`). Refresh tokens are single-use — using one issues a new pair (rotation).
+
+- `_make_refresh_token(user_id)` — creates and stores a refresh token
+- `_token_response(user_id)` — builds `{ token, refreshToken, expiresIn }` (shared by login/register/refresh)
+
+### GUC Settings
+
+```sql
+ALTER DATABASE "myapp" SET app.token_secret = 'change-me-in-production';
+ALTER DATABASE "myapp" SET app.access_token_ttl = '3600';     -- 1 hour
+ALTER DATABASE "myapp" SET app.refresh_token_ttl = '604800';  -- 7 days
+```
 
 ## Doc Functions
 
@@ -204,3 +225,80 @@ bun run migrate status       # show applied/pending list
 A `_migrations` table tracks which files have been applied. Each migration runs in its own transaction — if it fails, the transaction rolls back and the migration stays pending.
 
 Functions use `CREATE OR REPLACE` and are idempotent, so they don't need migrations. Migrations are for schema changes: new tables, columns, indexes, constraints.
+
+## Optimistic Concurrency Control
+
+For entities where concurrent edits are possible, add a `version` column:
+
+```sql
+CREATE TABLE thing (
+    id      SERIAL PRIMARY KEY,
+    name    TEXT NOT NULL,
+    version INT NOT NULL DEFAULT 1
+);
+```
+
+### Save with version check
+
+Add `p_version INT DEFAULT NULL` to the save function. On UPDATE, include `AND version = p_version` in the WHERE clause and `version = version + 1` in SET:
+
+```sql
+CREATE OR REPLACE FUNCTION save_thing(
+    p_user_id INT,
+    p_id INT DEFAULT NULL,
+    p_name TEXT DEFAULT NULL,
+    p_version INT DEFAULT NULL
+) RETURNS JSONB LANGUAGE plpgsql AS $$
+DECLARE
+    v_row thing%ROWTYPE;
+BEGIN
+    IF p_id IS NULL THEN
+        INSERT INTO thing (name) VALUES (p_name) RETURNING * INTO v_row;
+    ELSE
+        UPDATE thing SET name = COALESCE(p_name, name), version = version + 1
+         WHERE id = p_id AND (p_version IS NULL OR version = p_version)
+        RETURNING * INTO v_row;
+
+        IF v_row IS NULL THEN
+            IF EXISTS (SELECT 1 FROM thing WHERE id = p_id) THEN
+                RAISE EXCEPTION 'version conflict';
+            ELSE
+                RAISE EXCEPTION 'not found';
+            END IF;
+        END IF;
+    END IF;
+
+    -- notify as normal — version is included in row_to_json(v_row)
+    PERFORM pg_notify('change', ...);
+    RETURN row_to_json(v_row)::jsonb;
+END;
+$$;
+```
+
+### Remove with version check
+
+Same pattern — add `p_version INT DEFAULT NULL` and check it:
+
+```sql
+DELETE FROM thing WHERE id = p_id AND (p_version IS NULL OR version = p_version)
+RETURNING * INTO v_row;
+```
+
+### Client handling
+
+The `api` proxy rejects the promise on version conflict. Handle it in the component:
+
+```typescript
+try {
+    await api.save_thing(thing.id, name, thing.version);
+} catch (e: any) {
+    if (e.message.includes('version conflict')) {
+        // The doc signal already has the latest version via notify.
+        alert('Someone else modified this. Your view has been refreshed.');
+    } else {
+        throw e;
+    }
+}
+```
+
+The notification cycle handles stale data automatically: when another user saves, all clients with the doc open receive the update (including the new `version`). The conflicting user's local state is already current by the time they see the error.
