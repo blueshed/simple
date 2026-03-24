@@ -1,9 +1,13 @@
-import { signal, effect, routes } from "./lib/signals";
-import { initSession, clearSession, getSession, getToken } from "./lib/session";
-import "./components/app-login";
-import "./components/app-home";
+import { signal, effect, routes, when, navigate } from "@blueshed/railroad";
+import { initSession, clearSession, getToken } from "./lib/session";
+import { AppLogin } from "./components/app-login";
+import { AppHome } from "./components/app-home";
+import { AppTheme } from "./components/app-theme";
 
 const app = document.getElementById("app")!;
+
+// Mount theme toggle before the router target
+document.body.insertBefore(<AppTheme />, app);
 
 // --- Session singleton ---
 
@@ -29,15 +33,6 @@ function bootSession(token: string): void {
   });
 }
 
-function authRoute(mount: () => void): void {
-  if (!sessionReady.get()) {
-    if (!getToken()) { location.hash = "/"; return; }
-    app.innerHTML = `<p>Connecting…</p>`;
-    return;
-  }
-  mount();
-}
-
 // Restore session from stored token on reload
 const existingToken = getToken();
 if (existingToken) bootSession(existingToken);
@@ -45,16 +40,18 @@ if (existingToken) bootSession(existingToken);
 // --- Routes ---
 
 routes(app, {
-  "/": () => {
-    const el = document.createElement("app-login");
-    app.appendChild(el);
-    el.addEventListener("authenticated", ((e: CustomEvent) => {
-      bootSession(e.detail.token);
-      location.hash = "/home";
-    }) as EventListener);
+  "/": () => (
+    <AppLogin onAuthenticated={(token: string) => {
+      bootSession(token);
+      navigate("/home");
+    }} />
+  ),
+  "/home": () => {
+    if (!getToken()) { navigate("/"); return <></>; }
+    return when(
+      sessionReady,
+      () => <AppHome />,
+      () => <p>Connecting&#x2026;</p>,
+    );
   },
-  "/home": () => authRoute(() => {
-    const el = document.createElement("app-home");
-    app.appendChild(el);
-  }),
 });

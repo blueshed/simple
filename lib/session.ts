@@ -1,4 +1,4 @@
-import { signal, type Signal } from "./signals";
+import { signal, type Signal } from "@blueshed/railroad";
 
 type ServerEvent = { type: string; [key: string]: unknown };
 type Pending = {

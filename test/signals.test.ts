@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { signal, effect, computed, batch, matchRoute, Signal } from "../lib/signals";
+import { signal, effect, computed, batch, matchRoute, Signal } from "@blueshed/railroad";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SIGNAL

@@ -5,6 +5,7 @@
     "": {
       "name": "myapp",
       "dependencies": {
+        "@blueshed/railroad": "github:blueshed/railroad",
         "postgres": "^3.4.8",
       },
       "devDependencies": {
@@ -13,6 +14,8 @@
     },
   },
   "packages": {
+    "@blueshed/railroad": ["@blueshed/railroad@github:blueshed/railroad#681f0f3", {}, "blueshed-railroad-681f0f3", "sha512-LcxhHIJY3RTGlMPwXIv/jzJb9AiXrxQRQ/xVwe2rY9ZSz06goOakLy5fHFayKOmphREXU307p3QfoxHcY0RCHg=="],
+
     "@types/bun": ["@types/bun@1.3.9", "", { "dependencies": { "bun-types": "1.3.9" } }, "sha512-KQ571yULOdWJiMH+RIWIOZ7B2RXQGpL1YQrBtLIV3FqDcCu6FsbFUBwhdKUlCKUpS3PJDsHlJ1QKlpxoVR+xtw=="],
 
     "@types/node": ["@types/node@25.3.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-4K3bqJpXpqfg2XKGK9bpDTc6xO/xoUP/RBWS7AtRMug6zZFaRekiLzjVtAoZMquxoAbzBvy5nxQ7veS5eYzf8A=="],

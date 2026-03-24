@@ -184,11 +184,7 @@ pre {
     color: var(--fg-muted);
 }
 
-/* === app-theme === */
-
-app-theme {
-    display: contents;
-}
+/* === Theme toggle === */
 
 .theme-toggle {
     position: fixed;
@@ -215,55 +211,34 @@ app-theme {
     background: var(--secondary-hover);
 }
 
-/* === app-login === */
+/* === Login === */
 
-app-login label + label {
+#app label + label {
     margin-top: var(--space-sm);
 }
 
-app-login button {
+#app form button {
     margin-top: var(--space-md);
 }
 
-app-login .error {
-    display: inline-block;
-    margin-left: var(--space-md);
-    font-size: var(--font-size-sm);
-    color: var(--danger);
-}
+/* === Home === */
 
-/* === app-home === */
-
-app-home .connection-bar {
+.connection-bar {
     display: flex;
     align-items: center;
     gap: var(--space-md);
     margin-bottom: var(--space-sm);
 }
 
-app-home .status {
+.connection-bar .status {
     font-size: var(--font-size-sm);
     color: var(--fg-muted);
 }
 
-app-home .logout {
+.connection-bar .logout {
     margin-left: auto;
     padding: 0.25rem 0.75rem;
     font-size: 0.8rem;
     color: var(--fg-muted);
     border-color: var(--surface-border);
-}
-
-app-home .profile {
-    font-size: var(--font-size-legend);
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--fg-muted);
-    min-height: 0;
-}
-
-app-home .doc-go,
-app-home .mut-go {
-    margin-top: var(--space-md);
 }

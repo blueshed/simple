@@ -14,6 +14,7 @@
     "postinstall": "test -f setup.ts && bun setup.ts || true"
   },
   "dependencies": {
+    "@blueshed/railroad": "github:blueshed/railroad",
     "postgres": "^3.4.8"
   },
   "devDependencies": {

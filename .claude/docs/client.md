@@ -1,4 +1,4 @@
-# Client (`lib/session.ts` + `lib/signals.ts`)
+# Client (`lib/session.ts` + `@blueshed/railroad`)
 
 Zero-dependency browser client. No framework, no bundler — Bun serves TypeScript directly from `index.html`.
 
@@ -36,7 +36,7 @@ There is **one WebSocket per app**, shared by all components. Never call `connec
 ```typescript
 import { initSession, getSession, clearSession } from "./lib/session";
 
-// In app.ts — once after login:
+// In app.tsx — once after login:
 const session = initSession(token);
 
 // In any component:
@@ -50,10 +50,10 @@ clearSession();
 
 ### Boot Sequence
 
-Components must not mount until the WebSocket is open **and** the profile has arrived. Wire this in `app.ts` using a `sessionReady` signal:
+Components must not mount until the WebSocket is open **and** the profile has arrived. Wire this in `app.tsx` using a `sessionReady` signal:
 
 ```typescript
-import { signal, effect } from "./lib/signals";
+import { signal, effect } from "@blueshed/railroad";
 import { initSession, clearSession, getToken } from "./lib/session";
 
 const sessionReady = signal(false);
@@ -223,9 +223,9 @@ Used by cursor pagination and streaming. The data has the same shape as the doc 
 - `loadMore()` responses merged back into the signal
 - Notifications for items that might overlap with a pending page load
 
-## Signals (`lib/signals.ts`)
+## Signals (`@blueshed/railroad`)
 
-Custom reactive primitives — no external dependencies.
+Reactive primitives from the `@blueshed/railroad` package.
 
 ### `signal<T>(initial)`
 
@@ -301,181 +301,149 @@ When a mutation fires, the server sends only the changed data. The client merges
 3. **Build the static shell once** in `connectedCallback`. Wire event listeners once. Effects only touch the parts that change when data changes.
 4. **Use `batch()`** when setting multiple signals — effects run once at the end, not once per signal.
 
-## Web Components
+## TSX Components
 
-App code lives in `components/`. Each component is a custom element using `connectedCallback` and `disconnectedCallback` to wire and clean up effects.
+App code lives in `components/` as `.tsx` files. Components are functions that return JSX nodes. Railroad's JSX runtime handles reactive updates automatically via signals.
 
 ### Pattern: entity document
 
-```typescript
+```tsx
 import { getSession } from "../lib/session";
-import { effect } from "../lib/signals";
+import { text, when, list, signal, navigate } from "@blueshed/railroad";
 
-class AppThing extends HTMLElement {
-  private disposers: (() => void)[] = [];
+export function AppThing({ id }: { id: number }) {
+  const { api, status, openDoc, closeDoc } = getSession();
+  const doc = openDoc("thing_doc", id, null);
 
-  connectedCallback() {
-    const id = Number(this.getAttribute("thing-id"));
-    const { api, status, openDoc } = getSession();
-
-    // 1. Build the static shell ONCE — elements, forms, event listeners
-    this.innerHTML = `
-      <header>
-        <h1 id="name"></h1>
-        <span id="conn-status"></span>
-      </header>
-      <ul id="items"></ul>
-      <form id="add-form"><input name="title" placeholder="New item…" /><button>Add</button></form>
-    `;
-
-    this.querySelector("#add-form")!.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const input = this.querySelector<HTMLInputElement>("input[name=title]")!;
-      const title = input.value.trim();
-      if (!title) return;
-      input.value = "";
-      await api.save_item(null, id, title);
-      // No DOM update here — the notify/merge cycle handles it
-    });
-
-    // 2. Small, focused effects that patch individual DOM nodes
-
-    this.disposers.push(effect(() => {
-      this.querySelector("#conn-status")!.textContent = status.get() ?? "";
-    }));
-
-    const doc = openDoc("thing_doc", id, null);
-
-    // 3. Render effect — update only what changed
-    let prevItemIds: number[] = [];
-    this.disposers.push(effect(() => {
-      const d = doc.get() as any;
-      if (!d) return;
-      if (d._error) {
-        this.querySelector("#name")!.textContent = "";
-        this.querySelector("#items")!.innerHTML =
-          `<li style="color:var(--danger)">${d._error}</li>`;
-        return;
-      }
-      if (d._removed) { location.hash = "/home"; return; }
-
-      const thing = d.thing_doc;
-
-      // Patch the name — just set textContent, don't rebuild the header
-      this.querySelector("#name")!.textContent = thing.name;
-
-      // Patch the list — reconcile by id, don't replace innerHTML
-      const ul = this.querySelector("#items")!;
-      const currentIds = (thing.items ?? []).map((i: any) => i.id);
-
-      // Remove items no longer present
-      for (const id of prevItemIds) {
-        if (!currentIds.includes(id)) ul.querySelector(`[data-id="${id}"]`)?.remove();
-      }
-
-      // Add or update items
-      for (const item of thing.items ?? []) {
-        let li = ul.querySelector(`[data-id="${item.id}"]`) as HTMLElement | null;
-        if (!li) {
-          li = document.createElement("li");
-          li.setAttribute("data-id", String(item.id));
-          ul.appendChild(li);
-        }
-        li.textContent = item.title;
-      }
-
-      prevItemIds = currentIds;
-    }));
-  }
-
-  disconnectedCallback() {
-    this.disposers.forEach(d => d());
-    this.disposers = [];
-    getSession().closeDoc("thing_doc", Number(this.getAttribute("thing-id")));
-  }
+  return (
+    <div ref={() => () => closeDoc("thing_doc", id)}>
+      {when(
+        () => {
+          const d = doc.get() as any;
+          return d && !d._error && !d._removed ? d : null;
+        },
+        () => {
+          const d = doc.get() as any;
+          const thing = d.thing_doc;
+          return (
+            <>
+              <header>
+                <h1>{text(() => (doc.get() as any)?.thing_doc?.name ?? "")}</h1>
+                <span>{status}</span>
+              </header>
+              {list(
+                signal(thing.items ?? []),
+                (item: any) => item.id,
+                (item) => <li>{text(() => (item.get() as any).title)}</li>,
+              )}
+              <form onsubmit={async (e: Event) => {
+                e.preventDefault();
+                const input = (e.target as HTMLFormElement).elements.namedItem("title") as HTMLInputElement;
+                const title = input.value.trim();
+                if (!title) return;
+                input.value = "";
+                await api.save_item(null, id, title);
+              }}>
+                <input name="title" placeholder="New item\u2026" />
+                <button>Add</button>
+              </form>
+            </>
+          );
+        },
+        () => {
+          const d = doc.get() as any;
+          if (d?._removed) { navigate("/home"); return <></>; }
+          if (d?._error) return <p style="color:var(--danger)">{d._error}</p>;
+          return <p>Loading\u2026</p>;
+        },
+      )}
+    </div>
+  );
 }
-customElements.define("app-thing", AppThing);
 ```
 
 ### Pattern: collection document
 
-For list views, the same reconciliation approach applies — append new items, update changed items, remove deleted items:
+```tsx
+import { getSession } from "../lib/session";
+import { text, when, list, computed } from "@blueshed/railroad";
 
-```typescript
-const doc = openDoc("thing_list", 0, null);
-let prevIds: number[] = [];
+export function AppThingList() {
+  const { openDoc, closeDoc } = getSession();
+  const doc = openDoc("thing_list", 0, null);
+  const items = computed(() => {
+    const d = doc.get() as any;
+    return d?.thing_list ?? [];
+  });
 
-this.disposers.push(effect(() => {
-  const d = doc.get() as any;
-  if (!d) return;
-
-  const ul = this.querySelector("#list")!;
-  const items = d.thing_list ?? [];
-  const currentIds = items.map((i: any) => i.id);
-
-  // Remove
-  for (const id of prevIds) {
-    if (!currentIds.includes(id)) ul.querySelector(`[data-id="${id}"]`)?.remove();
-  }
-
-  // Add or update
-  for (const item of items) {
-    let li = ul.querySelector(`[data-id="${item.id}"]`) as HTMLElement | null;
-    if (!li) {
-      li = document.createElement("li");
-      li.setAttribute("data-id", String(item.id));
-      li.innerHTML = `<a></a>`;
-      ul.appendChild(li);
-    }
-    const a = li.querySelector("a")!;
-    if (a.textContent !== item.name) a.textContent = item.name;
-    if (a.getAttribute("href") !== `#/thing/${item.id}`) a.setAttribute("href", `#/thing/${item.id}`);
-  }
-
-  prevIds = currentIds;
-}));
+  return (
+    <div ref={() => () => closeDoc("thing_list", 0)}>
+      <ul>
+        {list(items, (i: any) => i.id, (item) => (
+          <li>
+            <a href={text(() => `#/thing/${(item.get() as any).id}`)}>
+              {text(() => (item.get() as any).name)}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 ```
 
 ### Pattern: paginated collection (infinite scroll)
 
-```typescript
-const { openDoc, docHasMore, loadMore } = getSession();
+```tsx
+import { getSession } from "../lib/session";
+import { computed, list, text, when } from "@blueshed/railroad";
 
-const doc = openDoc("post_feed", 0, null, { limit: 25 });
-const hasMore = docHasMore("post_feed", 0);
+export function AppFeed() {
+  const { openDoc, closeDoc, docHasMore, loadMore } = getSession();
+  const doc = openDoc("post_feed", 0, null, { limit: 25 });
+  const hasMore = docHasMore("post_feed", 0);
+  const posts = computed(() => {
+    const d = doc.get() as any;
+    return d?.posts ?? [];
+  });
 
-// Build shell with sentinel element
-this.innerHTML = `<ul id="posts"></ul><div id="sentinel"></div>`;
+  let sentinel: HTMLElement;
 
-// Intersection observer triggers loadMore when sentinel is visible
-const sentinel = this.querySelector("#sentinel")!;
-const observer = new IntersectionObserver((entries) => {
-  if (entries[0].isIntersecting && hasMore.peek()) {
-    loadMore("post_feed", 0, 25);
-  }
-});
-observer.observe(sentinel);
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0]?.isIntersecting && hasMore.peek()) {
+      loadMore("post_feed", 0, 25);
+    }
+  });
 
-// Effect renders items (same reconciliation as collection doc)
-this.disposers.push(effect(() => {
-  const d = doc.get() as any;
-  if (!d) return;
-  const ul = this.querySelector("#posts")!;
-  // ... reconcile items ...
-}));
-
-// Show/hide sentinel based on hasMore
-this.disposers.push(effect(() => {
-  sentinel.style.display = hasMore.get() ? "block" : "none";
-}));
+  return (
+    <div ref={(el: HTMLElement) => {
+      // observe sentinel once mounted
+      queueMicrotask(() => {
+        if (sentinel) observer.observe(sentinel);
+      });
+      return () => { observer.disconnect(); closeDoc("post_feed", 0); };
+    }}>
+      <ul>
+        {list(posts, (p: any) => p.id, (post) => (
+          <li>{text(() => (post.get() as any).title)}</li>
+        ))}
+      </ul>
+      {when(hasMore, () => (
+        <div ref={(el: HTMLElement) => { sentinel = el; }}>Loading more\u2026</div>
+      ))}
+    </div>
+  );
+}
 ```
 
 ### Key rules
 
+- Components are **functions** returning JSX — no custom elements or lifecycle hooks
+- Use `text(() => ...)` for reactive text that depends on signals
+- Use `when(signal, truthy, falsy)` for conditional rendering
+- Use `list(signal, keyFn, render)` for reactive lists — render receives `Signal<T>`
+- Use `ref={(el) => () => cleanup()}` for cleanup (the returned function runs on dispose)
 - Always call `getSession()` — never `connect(token)` directly
-- Always handle `!d` (null, pre-arrival) and `d._error` before accessing doc fields
-- Always call `closeDoc` in `disconnectedCallback`
+- Always handle null/error states with `when()` before accessing doc fields
 - `openDoc` is safe to call immediately — messages are queued until WS is open
 - **Never re-fetch a document after mutation** — the notify/merge handles it
-- **Never replace innerHTML of a container in an effect** — patch individual nodes instead
-- **Wire event listeners once** in `connectedCallback`, not inside effects

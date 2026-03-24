@@ -17,7 +17,7 @@ Read `spec.md` in the project root and implement the application. The spec is ge
    - `.claude/docs/css.md` — styling conventions
 4. Read the existing app files to understand what's already in place:
    - `init_db/01_schema.sql`, `init_db/03_functions.sql`, `server.ts`
-   - `components/app-home.ts`, `components/app-login.ts`
+   - `components/app-home.tsx`, `components/app-login.tsx`
 
 ## Implementation order
 
@@ -158,135 +158,116 @@ Refer to `.claude/docs/server.md` for the `createServer` config shape.
 
 No changes needed unless the spec has pre-auth methods beyond login/register/refresh_token/accept_invite.
 
-### 6. App entry point (`app.ts`)
+### 6. App entry point (`app.tsx`)
 
 Refer to `.claude/docs/client.md` for the boot sequence and session singleton.
 
-**Read the existing `app.ts` first.** It already has the session singleton pattern (`bootSession`, `authRoute`, `sessionReady`). Just add new routes — don't rewrite it.
+**Read the existing `app.tsx` first.** It already has the session singleton pattern (`bootSession`, `sessionReady`, `when()`). Just add new routes — don't rewrite it.
 
 Add a route for each document that needs its own page:
 
-```typescript
-"/thing/:id": ({ id }) => authRoute(() => {
-  const el = document.createElement("app-thing");
-  el.setAttribute("thing-id", id);
-  app.appendChild(el);
-}),
+```tsx
+"/thing/:id": ({ id }) => {
+  if (!getToken()) { navigate("/"); return <></>; }
+  return when(
+    sessionReady,
+    () => <AppThing id={Number(id)} />,
+    () => <p>Connecting&#x2026;</p>,
+  );
+},
 ```
 
 Key points:
 - **One WebSocket per app** — `initSession` creates it, `getSession` returns it from components
 - `bootSession` must be called on login AND on reload (if token exists)
-- `sessionReady` gates routes — because it's read inside the `routes()` effect, the router re-renders automatically when the session becomes ready
+- `sessionReady` gates routes via `when()` — the JSX reactively swaps when the session becomes ready
 - Components never call `connect()` or `initSession()` — they call `getSession()`
-- **Don't import component files that already exist** — only add imports for new components
+- **Import new components** at the top of `app.tsx` and add routes for them
 
 ### 7. Components
 
-Refer to `.claude/docs/client.md` for the web component pattern, openDoc/closeDoc, and the `_error` sentinel.
+Refer to `.claude/docs/client.md` for the TSX component pattern, openDoc/closeDoc, and error handling.
 
-**Read the existing components first.** If `app-home.ts` still uses `connect(token)`, update it to use `getSession()` instead — remove the `token` attribute, replace `connect(token)` with `getSession()`.
+**Read the existing components first.**
 
 For each document, create or update components:
 
-- **`components/app-home.ts`** — the authenticated shell. Open collection documents, render lists, navigate to detail views.
-- **`components/app-<name>.ts`** — detail components for non-collection documents. Use `openDoc` to subscribe, `effect` to render, `api.save_*` / `api.remove_*` to mutate.
+- **`components/app-home.tsx`** — the authenticated shell. Open collection documents, render lists, navigate to detail views.
+- **`components/app-<name>.tsx`** — detail components for non-collection documents. Use `openDoc`, `text()`, `list()`, `when()`, and `api.save_*` / `api.remove_*`.
 
-Follow the web component pattern from `.claude/docs/client.md`. The architecture is designed for **atomic, targeted updates** — never brute-force re-renders:
+Follow the TSX component pattern from `.claude/docs/client.md`. Components are functions returning JSX. Railroad's JSX runtime handles reactive updates automatically.
 
 ```
-mutation → pg_notify → merge into signal → effect re-runs → patch specific DOM nodes
+mutation → pg_notify → merge into signal → JSX auto-updates via text/list/when
 ```
 
 #### Component structure
 
-1. **Build the static shell once** in `connectedCallback` — all HTML structure, forms, event listeners
-2. **Effects only patch** — set `.textContent`, toggle classes, append/remove individual nodes
-3. **Never replace innerHTML of a container inside an effect** — it destroys scroll position, focus, input state, and event listeners
-4. **Never re-fetch a document after mutation** — the notify/merge cycle handles it automatically
+Components are functions that take props and return JSX nodes. Use `text()` for reactive text, `list()` for reactive lists, `when()` for conditional rendering. Cleanup via `ref={(el) => () => cleanup()}`.
 
-```typescript
+```tsx
 import { getSession } from "../lib/session";
-import { effect } from "../lib/signals";
+import { text, when, list, computed, navigate } from "@blueshed/railroad";
 
-class AppThing extends HTMLElement {
-  private disposers: (() => void)[] = [];
+export function AppThing({ id }: { id: number }) {
+  const { api, openDoc, closeDoc } = getSession();
+  const doc = openDoc("thing_doc", id, null);
+  const items = computed(() => (doc.get() as any)?.thing_doc?.items ?? []);
 
-  connectedCallback() {
-    const id = Number(this.getAttribute("thing-id"));
-    const { api, status, openDoc } = getSession();
-
-    // 1. Static shell — built once, never replaced
-    this.innerHTML = `
-      <header><h1 id="name"></h1></header>
-      <ul id="items"></ul>
-      <form id="add-form"><input name="title" /><button>Add</button></form>
-    `;
-
-    // 2. Event listeners — wired once, not inside effects
-    this.querySelector("#add-form")!.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const input = this.querySelector<HTMLInputElement>("input[name=title]")!;
-      const title = input.value.trim();
-      if (!title) return;
-      input.value = "";
-      await api.save_item(null, id, title);
-      // No DOM update here — notify/merge handles it
-    });
-
-    // 3. Effects — patch individual nodes, don't replace containers
-    const doc = openDoc("thing_doc", id, null);
-    let prevItemIds: number[] = [];
-
-    this.disposers.push(effect(() => {
-      const d = doc.get() as any;
-      if (!d) return;
-      if (d._error) {
-        this.querySelector("#name")!.textContent = d._error;
-        return;
-      }
-      if (d._removed) { location.hash = "/home"; return; }
-
-      const thing = d.thing_doc;
-      this.querySelector("#name")!.textContent = thing.name;
-
-      // Reconcile list by id — don't replace innerHTML
-      const ul = this.querySelector("#items")!;
-      const currentIds = (thing.items ?? []).map((i: any) => i.id);
-      for (const id of prevItemIds) {
-        if (!currentIds.includes(id)) ul.querySelector(`[data-id="${id}"]`)?.remove();
-      }
-      for (const item of thing.items ?? []) {
-        let li = ul.querySelector(`[data-id="${item.id}"]`) as HTMLElement | null;
-        if (!li) {
-          li = document.createElement("li");
-          li.setAttribute("data-id", String(item.id));
-          ul.appendChild(li);
-        }
-        li.textContent = item.title;
-      }
-      prevItemIds = currentIds;
-    }));
-  }
-
-  disconnectedCallback() {
-    this.disposers.forEach(d => d());
-    this.disposers = [];
-    getSession().closeDoc("thing_doc", Number(this.getAttribute("thing-id")));
-  }
+  return (
+    <div ref={() => () => closeDoc("thing_doc", id)}>
+      {when(
+        () => {
+          const d = doc.get() as any;
+          return d && !d._error && !d._removed;
+        },
+        () => (
+          <>
+            <header>
+              <h1>{text(() => (doc.get() as any)?.thing_doc?.name ?? "")}</h1>
+            </header>
+            <ul>
+              {list(items, (i: any) => i.id, (item) => (
+                <li>{text(() => (item.get() as any).title)}</li>
+              ))}
+            </ul>
+            <form onsubmit={async (e: Event) => {
+              e.preventDefault();
+              const input = (e.target as HTMLFormElement).elements.namedItem("title") as HTMLInputElement;
+              const title = input.value.trim();
+              if (!title) return;
+              input.value = "";
+              await api.save_item(null, id, title);
+            }}>
+              <input name="title" placeholder="New item\u2026" />
+              <button>Add</button>
+            </form>
+          </>
+        ),
+        () => {
+          const d = doc.get() as any;
+          if (d?._removed) { navigate("/home"); return <></>; }
+          if (d?._error) return <p style="color:var(--danger)">{d._error}</p>;
+          return <p>Loading\u2026</p>;
+        },
+      )}
+    </div>
+  );
 }
 ```
 
 Key rules for components:
+- Components are **functions** returning JSX — no custom elements or lifecycle hooks
+- Use `text(() => ...)` for reactive text, `list(signal, keyFn, render)` for lists, `when(signal, truthy, falsy)` for conditionals
+- Use `ref={(el) => () => cleanup()}` for cleanup — the returned function runs on dispose
 - Always use `getSession()` — never `connect(token)` or `initSession()`
-- `openDoc` returns a signal that starts as `null` — always handle the `!d` case
-- Always check for `d._error` and `d._removed` before accessing doc fields
-- Always call `closeDoc` in `disconnectedCallback`
+- `openDoc` returns a signal that starts as `null` — always handle the null case with `when()`
+- Always check for `_error` and `_removed` before accessing doc fields
+- Always clean up with `closeDoc` via the ref dispose pattern
 - `openDoc` is safe to call immediately — messages are queued until the WebSocket is open
-- **Atomic updates, not brute-force** — effects patch individual DOM nodes (`.textContent`, append, remove). Never set `innerHTML` on a container inside an effect. Never re-fetch a document after calling a mutation.
-- **Reconcile lists by id** — use `data-id` attributes. Add new items, update changed items, remove deleted items. Don't rebuild the list from scratch.
-- **Shared utilities** — if multiple components need the same helper (e.g. HTML escaping, date formatting), extract it into a shared file rather than duplicating it in each component.
-- **Scroll-aware lists** — for chat-like UIs, check if the user is near the bottom before auto-scrolling. Don't force-scroll when the user has scrolled up to read history.
+- **Never re-fetch a document after mutation** — the notify/merge cycle handles it
+- **Shared utilities** — if multiple components need the same helper, extract it into a shared file
+- **Scroll-aware lists** — for chat-like UIs, check if near bottom before auto-scrolling
 
 ### 8. Styles (`styles.css`)
 
@@ -318,15 +299,15 @@ The `confirmed` field is a bitmask: `1` = API tested `[A.]`, `2` = UX tested `[.
 - **KISS** — keep it simple. Don't over-engineer. Write the minimum code that satisfies the spec. Prefer flat over nested, obvious over clever, fewer files over more.
 - **DRY** — don't repeat yourself. If two mutations share the same permission check, extract a helper. If two components render lists the same way, factor out the pattern. If SQL functions share subqueries, use views or CTEs.
 - **Read before writing** — always read existing files before modifying them. Don't duplicate code that already exists. Don't rewrite files that only need a few lines added.
-- **Never edit** `lib/server-core.ts`, `lib/session.ts`, `lib/signals.ts` — these are infrastructure.
+- **Never edit** `lib/server-core.ts`, `lib/session.ts` — these are infrastructure. Signals/routes come from `@blueshed/railroad`.
 - **Never edit** `init_db/02_auth.sql` unless auth needs customization.
 - The `user` table already exists — map the spec's Account entity to it.
 - Every mutation function's first parameter is `p_user_id INT` — the server injects it.
 - Every doc function's first parameter is `p_user_id INT` — even for public docs.
 - Notify targets must exactly match what clients subscribe to via `openDoc`.
 - **Notify data must match the doc shape.** For root entity updates (`collection: null`), `row_to_json(v_row)::jsonb` is fine. For collection item upserts, build enriched data with nested objects (e.g. `row_to_json(v_row)::jsonb || jsonb_build_object('author', ..., 'children', ...)`). For removes, use `jsonb_build_object('id', v_id)`.
-- **Session singleton**: components call `getSession()`, never `connect()` or `initSession()`. Upgrade `app-home.ts` from `connect(token)` to `getSession()` if needed.
-- **Boot sequence**: `app.ts` owns `initSession` and `sessionReady`; routes gate on it via `authRoute`. Don't rewrite `app.ts` if it already has this pattern — just add routes.
+- **Session singleton**: components call `getSession()`, never `connect()` or `initSession()`.
+- **Boot sequence**: `app.tsx` owns `initSession` and `sessionReady`; routes gate on it via `when()`. Don't rewrite `app.tsx` if it already has this pattern — just add routes.
 - **openDoc starts null**: the server sends `op: "set"` with the full doc — components must handle `null` and `_error` before accessing fields.
 
 ## Presenting your plan

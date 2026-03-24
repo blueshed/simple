@@ -8,15 +8,15 @@ A minimal full-stack pattern: postgres owns everything, the server routes, the c
 |------|------------|
 | `lib/server-core.ts` | Generic WebSocket relay — **do not edit** |
 | `lib/session.ts` | Generic WebSocket client — **do not edit** |
-| `lib/signals.ts` | Generic reactive primitives — **do not edit** |
 | `lib/claude-helper.ts` | Optional `/claude.js` route for browser automation, enabled by `RUNTIME_CLAUDE=true` — **do not edit** |
 | `server.ts` | Your app entry point — configure `preAuth`, `profileFn`, custom routes |
 | `bunfig.toml` | Bun config — inlines `RUNTIME_*` env vars into client code — **do not edit** |
-| `app.ts` | Your client routing — add/rename routes |
+| `app.tsx` | Your client routing — add/rename routes |
 | `index.html` | HTML shell — update title |
 | `styles.css` | CSS tokens — customise colours/fonts |
-| `components/app-login.ts` | Login/register form — adapt to your register() signature |
-| `components/app-home.ts` | Authenticated shell — add your doc calls and UI |
+| `components/app-login.tsx` | Login/register form — adapt to your register() signature |
+| `components/app-home.tsx` | Authenticated shell — add your doc calls and UI |
+| `components/app-theme.tsx` | Dark/light mode toggle |
 | `init_db/00_extensions.sql` | Token crypto — update database name |
 | `init_db/01_schema.sql` | Auth tables + your domain tables |
 | `init_db/02_auth.sql` | Auth functions — **do not edit** unless you need custom auth |
