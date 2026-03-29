@@ -14,11 +14,11 @@
     "postinstall": "test -f setup.ts && bun setup.ts || true"
   },
   "dependencies": {
-    "@blueshed/railroad": "github:blueshed/railroad",
+    "@blueshed/railroad": "^0.3.3",
     "postgres": "^3.4.8"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.9"
+    "@types/bun": "^1.3.11"
   },
   "bun-create": {
     "start": "bun run db && bun run dev"

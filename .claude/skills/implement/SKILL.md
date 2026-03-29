@@ -164,7 +164,7 @@ Refer to `.claude/docs/client.md` for the boot sequence and session singleton.
 
 **Read the existing `app.tsx` first.** It already has the session singleton pattern (`bootSession`, `sessionReady`, `when()`). Just add new routes — don't rewrite it.
 
-Add a route for each document that needs its own page:
+Add a route for each document that needs its own page. Handlers receive `(params, params$)` — destructure the first for initial values, use `params$` if the component needs to react to same-pattern param changes:
 
 ```tsx
 "/thing/:id": ({ id }) => {
@@ -183,6 +183,7 @@ Key points:
 - `sessionReady` gates routes via `when()` — the JSX reactively swaps when the session becomes ready
 - Components never call `connect()` or `initSession()` — they call `getSession()`
 - **Import new components** at the top of `app.tsx` and add routes for them
+- **Async route handlers** — handlers can return `Promise<Node>` for data loading before render
 
 ### 7. Components
 
@@ -258,7 +259,7 @@ export function AppThing({ id }: { id: number }) {
 
 Key rules for components:
 - Components are **functions** returning JSX — no custom elements or lifecycle hooks
-- Use `text(() => ...)` for reactive text, `list(signal, keyFn, render)` for lists, `when(signal, truthy, falsy)` for conditionals
+- Use `text(() => ...)` for reactive text, `list(signal, keyFn, render)` for keyed lists, `list(signal, render)` for index-based lists, `when(signal, truthy, falsy)` for conditionals
 - Use `ref={(el) => () => cleanup()}` for cleanup — the returned function runs on dispose
 - Always use `getSession()` — never `connect(token)` or `initSession()`
 - `openDoc` returns a signal that starts as `null` — always handle the null case with `when()`
@@ -266,8 +267,15 @@ Key rules for components:
 - Always clean up with `closeDoc` via the ref dispose pattern
 - `openDoc` is safe to call immediately — messages are queued until the WebSocket is open
 - **Never re-fetch a document after mutation** — the notify/merge cycle handles it
-- **Shared utilities** — if multiple components need the same helper, extract it into a shared file
+- **Shared utilities** — if multiple components need the same helper, extract it into a shared file. Use `key`/`provide`/`inject` from `@blueshed/railroad` for dependency injection across components without prop-threading.
 - **Scroll-aware lists** — for chat-like UIs, check if near bottom before auto-scrolling
+
+Anti-patterns to avoid:
+- **No `.get()` in JSX children** — `<p>{count}</p>` is reactive; `<p>{count.get()}</p>` reads once and never updates
+- **No `text()` for attributes** — `text()` creates a DOM node; use `computed()` for reactive attributes
+- **No bare nested `when()`** — wrap inner `when()` in a real element: `<div>{when(...)}</div>`
+- **No shared DOM nodes across `when()` branches** — create nodes fresh inside each branch
+- **Guard against null inside `when()` branches** — always null-check: `text(() => item.get()?.name ?? "")`
 
 ### 8. Styles (`styles.css`)
 

@@ -11,7 +11,7 @@ The stylesheet is organized into sections:
 3. **Base** — body defaults
 4. **Components** — element-level styles (fieldset, legend, label, input, button, pre)
 5. **Utilities** — `.accent`, `.muted`
-6. **Component overrides** — scoped to web component tag names (`app-login`, `app-home`)
+6. **Component overrides** — scoped to component wrapper classes (`.app-login`, `.app-home`)
 
 ## Tokens
 
@@ -82,7 +82,7 @@ Every color is a token. Components never use hardcoded colors — they reference
 ## Conventions
 
 - **No class-based component styling** — element selectors (`fieldset`, `button`, `input`) define base appearance
-- **Web component scoping** — overrides use tag name prefix: `app-login .error`, `app-home .status`
+- **Component scoping** — overrides use wrapper class prefix: `.app-login .error`, `.app-home .status`
 - **No BEM, no utility classes** (beyond `.accent` and `.muted`)
 - **Semantic HTML** — fieldsets with legends, labels with inputs, buttons with no extra wrappers
 - **Micro-interactions** — `scale(0.96)` on button active, smooth hover transitions
@@ -90,10 +90,10 @@ Every color is a token. Components never use hardcoded colors — they reference
 ## Adding a New Component
 
 1. Style base elements (fieldset, button, input, etc.) — they inherit tokens automatically
-2. If component-specific overrides are needed, add a section at the bottom scoped to the tag name:
+2. If component-specific overrides are needed, add a section at the bottom scoped to a wrapper class:
    ```css
    /* === app-widget === */
-   app-widget .special { color: var(--accent); }
+   .app-widget .special { color: var(--accent); }
    ```
 3. Use tokens for all colors, spacing, and radii — never hardcode values
 4. Use `--secondary` for default buttons, `--primary` for call-to-action buttons

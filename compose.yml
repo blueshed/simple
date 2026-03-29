@@ -28,3 +28,5 @@ services:
 
   plantuml:
     image: plantuml/plantuml-server:jetty
+    ports:
+      - "8081:8080"

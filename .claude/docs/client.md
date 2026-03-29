@@ -231,11 +231,17 @@ Reactive primitives from the `@blueshed/railroad` package.
 
 ```typescript
 const count = signal(0);
-count.get()           // read (tracked inside effects)
-count.set(1)          // write
-count.peek()          // read without tracking
-count.update(n => n + 1)
+count.get()                  // read (tracked inside effects)
+count.set(1)                 // write
+count.peek()                 // read without tracking
+count.update(n => n + 1)     // set via transform
+count.mutate(v => v.items.push(x))  // structuredClone, mutate in place, notify
+count.patch({ name: "new" }) // shallow merge for object signals
 ```
+
+`.mutate(fn)` deep-clones the value, passes the clone to `fn`, then sets the result. Use it for in-place array/object mutations without manual spreading.
+
+`.patch(partial)` shallow-merges `partial` onto the current value — shorthand for `s.set({ ...s.peek(), ...partial })`.
 
 ### `effect(fn)`
 
@@ -265,19 +271,70 @@ Defers effect notifications until the block completes:
 batch(() => { a.set(1); b.set(2); });  // effects run once
 ```
 
+### Dispose Scopes
+
+Manage cleanup for effects and computed signals created inside a component:
+
+```typescript
+import { pushDisposeScope, popDisposeScope } from "@blueshed/railroad";
+
+pushDisposeScope();
+// ... create effects, computed signals ...
+const dispose = popDisposeScope();
+// later:
+dispose();  // cleans up everything created in the scope
+```
+
+The router uses dispose scopes automatically — route handlers are wrapped in a scope that cleans up when the route changes. You rarely need these directly, but they're available for advanced patterns.
+
 ### Routing
 
 ```typescript
 routes(app, {
-  "/":     () => { /* mount login component */ },
-  "/home": () => { /* mount home component */ },
+  "/":           () => <Home />,
+  "/thing/:id":  ({ id }, params$) => <AppThing id={Number(id)} params$={params$} />,
+  "/status":     async () => { const s = await loadData(); return <Status data={s} />; },
+  "*":           () => <NotFound />,
 });
 
 navigate("/home");           // set location.hash
 route("/thing/:id").get()   // { id: "42" } or null
 ```
 
+Handlers receive `(params, params$)` — a plain object for destructuring plus a `Signal` that updates when params change within the same pattern (e.g. `/thing/1` → `/thing/2` updates `params$` without teardown).
+
+Async handlers return `Promise<Node>` — the router waits for the promise before mounting.
+
 The `routes()` call wraps all handlers in an `effect`. Any signal read inside a handler (e.g. `sessionReady.get()`) becomes a reactive dependency — the router re-runs automatically when it changes.
+
+### Shared (Dependency Injection)
+
+Typed provide/inject for sharing values across components without prop-threading:
+
+```typescript
+import { key, provide, inject, tryInject } from "@blueshed/railroad";
+
+const STORE = key<MyStore>("store");
+provide(STORE, createStore());     // in app.tsx or home component
+const store = inject(STORE);       // anywhere — throws if not provided
+const maybe = tryInject(STORE);    // returns undefined if not provided
+```
+
+### Logger
+
+Colored, timestamped, level-gated console output for server-side code:
+
+```typescript
+import { createLogger, setLogLevel, loggedRequest } from "@blueshed/railroad";
+
+const log = createLogger("[app]");
+log.info("started");       // 12:34:56.789 INFO  [app] started
+log.debug("tick");         // only shown when level is "debug"
+setLogLevel("debug");      // "error" | "warn" | "info" | "debug"
+
+// Wrap a route handler with access logging:
+const handler = loggedRequest("[api]", myHandler);
+```
 
 ## Reactive Update Philosophy
 
@@ -441,9 +498,18 @@ export function AppFeed() {
 - Components are **functions** returning JSX — no custom elements or lifecycle hooks
 - Use `text(() => ...)` for reactive text that depends on signals
 - Use `when(signal, truthy, falsy)` for conditional rendering
-- Use `list(signal, keyFn, render)` for reactive lists — render receives `Signal<T>`
+- Use `list(signal, keyFn, render)` for keyed lists — render receives `Signal<T>`, `Signal<number>`
+- Use `list(signal, render)` for index-based lists — render receives raw `T`
 - Use `ref={(el) => () => cleanup()}` for cleanup (the returned function runs on dispose)
 - Always call `getSession()` — never `connect(token)` directly
 - Always handle null/error states with `when()` before accessing doc fields
 - `openDoc` is safe to call immediately — messages are queued until WS is open
 - **Never re-fetch a document after mutation** — the notify/merge handles it
+
+### Anti-patterns
+
+1. **No `.get()` in JSX children.** `<p>{count}</p>` is reactive (railroad auto-subscribes). `<p>{count.get()}</p>` reads once and never updates.
+2. **No `text()` for attributes.** `text()` creates a DOM Text node — use `computed()` for reactive attribute values: `<a href={computed(() => `#/thing/${id.get()}`)}>`
+3. **No bare nested `when()`.** `when()` returns a fragment — nesting inside another `when()` breaks dispose scope tracking. Always wrap an inner `when()` in a real element: `<div>{when(...)}</div>`.
+4. **No shared DOM nodes across `when()` branches.** Nodes must be created fresh inside each branch function. A node reused across branches will be torn from the DOM when the other branch activates.
+5. **Guard against null inside `when()` branches.** Signal cascade order is not guaranteed — an inner `when()` can fire before the outer `when()` swaps it away. Always null-check: `text(() => item.get()?.name ?? "")`.

@@ -16,7 +16,7 @@ Tests the reactive primitives and routing helpers from `@blueshed/railroad`. Pur
 
 | Block | What it covers |
 |-------|----------------|
-| `signal` | get, set, update, peek, dedup |
+| `signal` | get, set, update, mutate, patch, peek, dedup |
 | `computed` | derivation, chaining |
 | `effect` | re-run, cleanup, dispose, stale deps |
 | `batch` | deferred flush, nesting |

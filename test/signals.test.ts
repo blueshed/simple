@@ -58,6 +58,47 @@ describe("signal", () => {
     s.set(NaN); // Object.is(NaN, NaN) is true
     expect(runs).toBe(1);
   });
+
+  test("mutate clones and modifies in place", () => {
+    const s = signal({ items: [1, 2, 3] });
+    const original = s.peek();
+    s.mutate((v) => v.items.push(4));
+    expect(s.get().items).toEqual([1, 2, 3, 4]);
+    // original is not mutated — structuredClone was used
+    expect(original.items).toEqual([1, 2, 3]);
+  });
+
+  test("mutate notifies even when reference changes", () => {
+    const s = signal({ count: 0 });
+    let runs = 0;
+    effect(() => {
+      s.get();
+      runs++;
+    });
+    expect(runs).toBe(1);
+    s.mutate((v) => { v.count = 1; });
+    expect(runs).toBe(2);
+    expect(s.get().count).toBe(1);
+  });
+
+  test("patch shallow-merges onto object", () => {
+    const s = signal({ name: "Alice", age: 30 });
+    s.patch({ name: "Bob" });
+    expect(s.get()).toEqual({ name: "Bob", age: 30 });
+  });
+
+  test("patch notifies listeners", () => {
+    const s = signal({ x: 1, y: 2 });
+    let runs = 0;
+    effect(() => {
+      s.get();
+      runs++;
+    });
+    expect(runs).toBe(1);
+    s.patch({ x: 10 });
+    expect(runs).toBe(2);
+    expect(s.get()).toEqual({ x: 10, y: 2 });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

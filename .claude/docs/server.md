@@ -182,3 +182,36 @@ Subscription is the sole gate — any client with a doc open receives all events
 - Functions starting with `_` are blocked (internal, e.g. `_verify_token`)
 - `preAuth` functions must use `POST /auth`, not WebSocket
 - All inputs go through parameterized queries (`$1, $2, ...`)
+
+## Logger
+
+Railroad exports a structured logger for server-side code:
+
+```typescript
+import { createLogger, setLogLevel, loggedRequest } from "@blueshed/railroad";
+
+const log = createLogger("[server]");
+log.info("listening on :3000");   // 12:34:56.789 INFO  [server] listening on :3000
+log.warn("slow query");           // yellow
+log.error("connection failed");   // red, always shown
+log.debug("tick");                // only shown when level is "debug"
+
+setLogLevel("debug");             // "error" | "warn" | "info" | "debug"
+                                  // defaults to process.env.LOG_LEVEL or "info"
+```
+
+### Request logging middleware
+
+Wrap any custom route handler with access logging:
+
+```typescript
+import { loggedRequest } from "@blueshed/railroad";
+
+createServer({
+  ...config,
+  routes: {
+    "/api/health": loggedRequest("[health]", (req) => Response.json({ ok: true })),
+  },
+});
+// logs: 12:34:56.789 INFO  [health] GET /api/health → 200 (1.2ms)
+```
