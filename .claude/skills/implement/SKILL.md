@@ -194,21 +194,21 @@ Refer to `.claude/docs/client.md` for the TSX component pattern, openDoc/closeDo
 For each document, create or update components:
 
 - **`components/app-home.tsx`** — the authenticated shell. Open collection documents, render lists, navigate to detail views.
-- **`components/app-<name>.tsx`** — detail components for non-collection documents. Use `openDoc`, `text()`, `list()`, `when()`, and `api.save_*` / `api.remove_*`.
+- **`components/app-<name>.tsx`** — detail components for non-collection documents. Use `openDoc`, `list()`, `when()`, function children `{() => expr}`, `.map()`, and `api.save_*` / `api.remove_*`.
 
 Follow the TSX component pattern from `.claude/docs/client.md`. Components are functions returning JSX. Railroad's JSX runtime handles reactive updates automatically.
 
 ```
-mutation → pg_notify → merge into signal → JSX auto-updates via text/list/when
+mutation → pg_notify → merge into signal → JSX auto-updates via function children/list/when
 ```
 
 #### Component structure
 
-Components are functions that take props and return JSX nodes. Use `text()` for reactive text, `list()` for reactive lists, `when()` for conditional rendering. Cleanup via `ref={(el) => () => cleanup()}`.
+Components are functions that take props and return JSX nodes. Use `{() => expr}` for reactive text (function children), `.map(fn)` for derived signal values, `list()` for reactive lists, `when()` for conditional rendering. Cleanup via `ref={(el) => () => cleanup()}`.
 
 ```tsx
 import { getSession } from "../lib/session";
-import { text, when, list, computed, navigate } from "@blueshed/railroad";
+import { when, list, computed, navigate } from "@blueshed/railroad";
 
 export function AppThing({ id }: { id: number }) {
   const { api, openDoc, closeDoc } = getSession();
@@ -225,11 +225,11 @@ export function AppThing({ id }: { id: number }) {
         () => (
           <>
             <header>
-              <h1>{text(() => (doc.get() as any)?.thing_doc?.name ?? "")}</h1>
+              <h1>{() => (doc.get() as any)?.thing_doc?.name ?? ""}</h1>
             </header>
             <ul>
               {list(items, (i: any) => i.id, (item) => (
-                <li>{text(() => (item.get() as any).title)}</li>
+                <li>{item.map((i: any) => i.title)}</li>
               ))}
             </ul>
             <form onsubmit={async (e: Event) => {
@@ -259,7 +259,7 @@ export function AppThing({ id }: { id: number }) {
 
 Key rules for components:
 - Components are **functions** returning JSX — no custom elements or lifecycle hooks
-- Use `text(() => ...)` for reactive text, `list(signal, keyFn, render)` for keyed lists, `list(signal, render)` for index-based lists, `when(signal, truthy, falsy)` for conditionals
+- Use `{() => expr}` for reactive text (function children), `.map(fn)` for derived values, `list(signal, keyFn, render)` for keyed lists, `list(signal, render)` for index-based lists, `when(signal, truthy, falsy)` for conditionals
 - Use `ref={(el) => () => cleanup()}` for cleanup — the returned function runs on dispose
 - Always use `getSession()` — never `connect(token)` or `initSession()`
 - `openDoc` returns a signal that starts as `null` — always handle the null case with `when()`
@@ -271,11 +271,10 @@ Key rules for components:
 - **Scroll-aware lists** — for chat-like UIs, check if near bottom before auto-scrolling
 
 Anti-patterns to avoid:
-- **No `.get()` in JSX children** — `<p>{count}</p>` is reactive; `<p>{count.get()}</p>` reads once and never updates
-- **No `text()` for attributes** — `text()` creates a DOM node; use `computed()` for reactive attributes
-- **No bare nested `when()`** — wrap inner `when()` in a real element: `<div>{when(...)}</div>`
+- **No React** — no useState, useEffect, hooks, lifecycle methods, or react imports
+- **No `.get()` in JSX children** — `{count}` or `{() => count.get() + 1}` — never `{count.get()}`
 - **No shared DOM nodes across `when()` branches** — create nodes fresh inside each branch
-- **Guard against null inside `when()` branches** — always null-check: `text(() => item.get()?.name ?? "")`
+- **No `transition-all` in CSS** near layout boundaries — use specific properties
 
 ### 8. Styles (`styles.css`)
 

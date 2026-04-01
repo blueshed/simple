@@ -237,11 +237,14 @@ count.peek()                 // read without tracking
 count.update(n => n + 1)     // set via transform
 count.mutate(v => v.items.push(x))  // structuredClone, mutate in place, notify
 count.patch({ name: "new" }) // shallow merge for object signals
+count.map(n => `Count: ${n}`)       // derive a new signal
 ```
 
 `.mutate(fn)` deep-clones the value, passes the clone to `fn`, then sets the result. Use it for in-place array/object mutations without manual spreading.
 
 `.patch(partial)` shallow-merges `partial` onto the current value — shorthand for `s.set({ ...s.peek(), ...partial })`.
+
+`.map(fn)` derives a new signal — like `computed()` but called on the source signal. Ideal for reactive attributes and keyed list item content: `item.map(i => i.name)`.
 
 ### `effect(fn)`
 
@@ -366,7 +369,7 @@ App code lives in `components/` as `.tsx` files. Components are functions that r
 
 ```tsx
 import { getSession } from "../lib/session";
-import { text, when, list, signal, navigate } from "@blueshed/railroad";
+import { when, list, signal, navigate } from "@blueshed/railroad";
 
 export function AppThing({ id }: { id: number }) {
   const { api, status, openDoc, closeDoc } = getSession();
@@ -385,13 +388,13 @@ export function AppThing({ id }: { id: number }) {
           return (
             <>
               <header>
-                <h1>{text(() => (doc.get() as any)?.thing_doc?.name ?? "")}</h1>
+                <h1>{() => (doc.get() as any)?.thing_doc?.name ?? ""}</h1>
                 <span>{status}</span>
               </header>
               {list(
                 signal(thing.items ?? []),
                 (item: any) => item.id,
-                (item) => <li>{text(() => (item.get() as any).title)}</li>,
+                (item) => <li>{item.map((i: any) => i.title)}</li>,
               )}
               <form onsubmit={async (e: Event) => {
                 e.preventDefault();
@@ -423,7 +426,7 @@ export function AppThing({ id }: { id: number }) {
 
 ```tsx
 import { getSession } from "../lib/session";
-import { text, when, list, computed } from "@blueshed/railroad";
+import { when, list, computed } from "@blueshed/railroad";
 
 export function AppThingList() {
   const { openDoc, closeDoc } = getSession();
@@ -438,8 +441,8 @@ export function AppThingList() {
       <ul>
         {list(items, (i: any) => i.id, (item) => (
           <li>
-            <a href={text(() => `#/thing/${(item.get() as any).id}`)}>
-              {text(() => (item.get() as any).name)}
+            <a href={item.map((i: any) => `#/thing/${i.id}`)}>
+              {item.map((i: any) => i.name)}
             </a>
           </li>
         ))}
@@ -453,7 +456,7 @@ export function AppThingList() {
 
 ```tsx
 import { getSession } from "../lib/session";
-import { computed, list, text, when } from "@blueshed/railroad";
+import { computed, list, when } from "@blueshed/railroad";
 
 export function AppFeed() {
   const { openDoc, closeDoc, docHasMore, loadMore } = getSession();
@@ -482,7 +485,7 @@ export function AppFeed() {
     }}>
       <ul>
         {list(posts, (p: any) => p.id, (post) => (
-          <li>{text(() => (post.get() as any).title)}</li>
+          <li>{post.map((p: any) => p.title)}</li>
         ))}
       </ul>
       {when(hasMore, () => (
@@ -496,7 +499,8 @@ export function AppFeed() {
 ### Key rules
 
 - Components are **functions** returning JSX — no custom elements or lifecycle hooks
-- Use `text(() => ...)` for reactive text that depends on signals
+- Use `{() => expr}` for reactive text that depends on signals (function children)
+- Use `.map(fn)` on signals for derived values in keyed list items and attributes
 - Use `when(signal, truthy, falsy)` for conditional rendering
 - Use `list(signal, keyFn, render)` for keyed lists — render receives `Signal<T>`, `Signal<number>`
 - Use `list(signal, render)` for index-based lists — render receives raw `T`
@@ -508,8 +512,7 @@ export function AppFeed() {
 
 ### Anti-patterns
 
-1. **No `.get()` in JSX children.** `<p>{count}</p>` is reactive (railroad auto-subscribes). `<p>{count.get()}</p>` reads once and never updates.
-2. **No `text()` for attributes.** `text()` creates a DOM Text node — use `computed()` for reactive attribute values: `<a href={computed(() => `#/thing/${id.get()}`)}>`
-3. **No bare nested `when()`.** `when()` returns a fragment — nesting inside another `when()` breaks dispose scope tracking. Always wrap an inner `when()` in a real element: `<div>{when(...)}</div>`.
-4. **No shared DOM nodes across `when()` branches.** Nodes must be created fresh inside each branch function. A node reused across branches will be torn from the DOM when the other branch activates.
-5. **Guard against null inside `when()` branches.** Signal cascade order is not guaranteed — an inner `when()` can fire before the outer `when()` swaps it away. Always null-check: `text(() => item.get()?.name ?? "")`.
+1. **No React.** No useState, useEffect, hooks, lifecycle methods, or react imports.
+2. **No `.get()` in JSX children.** `{count}` or `{() => count.get() + 1}` — never `{count.get()}`.
+3. **No shared DOM nodes across `when()` branches.** Create nodes fresh inside each branch.
+4. **No `transition-all` in CSS** near layout boundaries. Use specific properties.
