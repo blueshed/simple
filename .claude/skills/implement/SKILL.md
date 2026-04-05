@@ -18,6 +18,7 @@ Read `spec.md` in the project root and implement the application. The spec is ge
 4. Read the existing app files to understand what's already in place:
    - `init_db/01_schema.sql`, `init_db/03_functions.sql`, `server.ts`
    - `components/app-home.tsx`, `components/app-login.tsx`
+5. Read agentic context: `bun model list task && bun model list memory && bun model list flag`. Use memories to inform decisions. Work from existing tasks if present.
 
 ## Implementation order
 
@@ -299,6 +300,10 @@ The `confirmed` field is a bitmask: `1` = API tested `[A.]`, `2` = UX tested `[.
 
 5. **UX test** — if Playwright MCP tools are available (`browser_navigate`, `browser_snapshot`, etc.), walk through each checklist scenario in the browser. Log in as the actor, perform the action, verify the result via snapshots. For checks that pass both API and UX, update to `confirmed:3`. See `.claude/docs/testing.md` "UX Tests — Playwright MCP" for the full approach.
 6. **Verify** — run `bun model list checklist` to confirm all checks show `[A.]` or `[AU]` and the counters match.
+
+### 10. Flags
+
+Reset and verify all flags. Run `bunx tsc --noEmit` and `bun test`, update flag status. Review for clean code — no dead code, no duplication, no shortcuts left behind. All flags must pass before declaring the implementation complete.
 
 ## Key rules
 

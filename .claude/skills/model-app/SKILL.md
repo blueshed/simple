@@ -16,23 +16,23 @@ Decompose application requirements into [Simple](https://github.com/blueshed/sim
 
 ## Before you start
 
-Check that the Easy and PlantUML containers are running:
+Check that the Easy container is running:
 
 ```bash
-docker compose ps --format '{{.Service}} {{.State}}' | grep -E '^(easy|plantuml) '
+docker compose ps --format '{{.Service}} {{.State}}' | grep -E '^(easy|postgres) '
 ```
 
-If they are not running, tell the user:
+If not running, tell the user:
 
 ```
-The Easy and PlantUML containers are not running. Start them with:
+The Easy container is not running. Start it with:
 
   bun run up
 
 Then try again.
 ```
 
-Do not proceed with modeling until both containers are running.
+Do not proceed with modeling until Easy is running.
 
 ## What is Simple?
 

@@ -2,6 +2,41 @@
 
 A minimal full-stack pattern: postgres owns everything, the server routes, the client merges.
 
+## Before Starting Work
+
+This project uses [Easy](https://github.com/blueshed/easy) for agentic context — tasks, memories, and flags stored in the model database.
+
+Before diving into any task:
+
+1. Check containers: `docker compose ps --format '{{.Service}} {{.State}}' | grep -E '^(easy|postgres) '`
+2. If Easy is running, read current state:
+   ```bash
+   bun model list task
+   bun model list memory
+   bun model list flag
+   ```
+3. Report what you found before proceeding.
+
+If Easy is not running, tell the user to run `bun run up` and proceed without agentic updates.
+
+### During work
+
+- Update task status as steps complete
+- Save non-obvious decisions as memories
+- Reset flags to `unknown` when touching code
+
+### Before finishing
+
+All flags must pass:
+
+| Flag | Gate |
+|------|------|
+| `typecheck` | `bunx tsc --noEmit` |
+| `api-tests` | `bun test` |
+| `clean` | No dead code, no duplication, no shortcuts left behind |
+
+Don't declare work done with any flag failing.
+
 ## Files
 
 | File | What to do |
