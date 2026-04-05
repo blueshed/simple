@@ -1,166 +1,257 @@
 # Modeler CLI Reference
 
-## Commands
+## CLI Commands
+
+All mutations use `save <schema> '<json>'` or `delete <schema> '<json>'`. The 16 schemas are: entity, field, relation, story, document, expansion, method, publish, notification, permission, checklist, check, metadata, task, memory, flag.
 
 ```
 Mutations:
-  bun model save <schema> '<json>'       Upsert by natural key (coalescing)
-  bun model delete <schema> '<json>'     Remove by natural key
+  bun model save <schema> <json>       Upsert by natural key (coalescing)
+  bun model delete <schema> <json>     Remove by natural key
 
 Queries:
-  bun model list [schema]                List all, or items of a schema type
-  bun model get <schema> <key>           Get one item as JSON
-  bun model export                       Markdown spec to stdout
+  bun model list [schema]              List all, or items of a schema type
+  bun model get <schema> <key>         Get one item as JSON
+  bun model export                     Markdown spec to stdout
 
 Maintenance:
-  bun model doctor [--fix]               Report/repair orphaned references
+  bun model doctor [--fix]             Report/repair orphaned references
 
 Batch:
-  bun model batch                        JSONL from stdin: ["save","entity",{...}]
-  bun model import <file.yml|json>       Import YAML or JSON file
-
-Schemas: entity, field, relation, story, document, expansion, method, publish,
-         notification, permission, checklist, check, metadata
+  bun model batch                      JSONL from stdin: ["save","entity",{...}]
+  bun model import <file.yml|json>     Import YAML or JSON file containing model definitions
 ```
 
-## Save — Coalescing Upsert
+## Save — Schema Reference
 
-Save finds an existing record by natural key and updates only the provided fields. If no record exists, it inserts with defaults. Children (inline arrays) are merged by their own natural keys.
+### entity
+Natural key: `name`. Children: `fields`, `methods`.
+```bash
+bun model save entity '{"name":"Room","fields":[{"name":"id","type":"number"},{"name":"name","type":"string"}]}'
+```
+
+### field
+Natural key: `entity` + `name`.
+```bash
+bun model save field '{"entity":"Room","name":"capacity","type":"number"}'
+```
+
+### relation
+Natural key: `from` + `to` + `label`. Cardinality: `*` (has-many, default) or `1` (belongs-to).
+```bash
+bun model save relation '{"from":"Room","to":"Message","label":"messages","cardinality":"*"}'
+bun model save relation '{"from":"Message","to":"Account","label":"sender","cardinality":"1"}'
+```
+
+### story
+Natural key: `actor` + `action`. Children: `links` (type + name).
+```bash
+bun model save story '{"actor":"visitor","action":"browse available rooms"}'
+bun model save story '{"actor":"member","action":"send a message","links":[{"type":"entity","name":"Room"},{"type":"document","name":"RoomDoc"}]}'
+```
+
+### document
+Natural key: `name`. Children: `expansions`. Boolean flags: `collection`, `public`. Fetch mode: `fetch` (select|cursor|stream).
+```bash
+bun model save document '{"name":"RoomDoc","entity":"Room"}'
+bun model save document '{"name":"RoomList","entity":"Room","collection":true,"public":true}'
+bun model save document '{"name":"MessageFeed","entity":"Message","collection":true,"fetch":"cursor"}'
+```
+
+### expansion
+Natural key: `document` + `name`. Boolean flags: `belongs_to`, `shallow`. Nested via `parent` field. Children: `expansions` (recursive).
+```bash
+# has-many
+bun model save expansion '{"document":"RoomDoc","name":"messages","entity":"Message","foreign_key":"room_id"}'
+
+# belongs-to nested under messages
+bun model save expansion '{"document":"RoomDoc","name":"sender","entity":"Account","foreign_key":"sender_id","belongs_to":true,"parent":"messages"}'
+
+# shallow
+bun model save expansion '{"document":"VenueDoc","name":"occasions","entity":"Occasion","foreign_key":"venue_id","shallow":true}'
+```
+
+### method
+Natural key: `entity` + `name`. Children: `publishes`, `permissions`, `notifications`. String shorthand for publishes and permissions. Boolean flag: `auth_required` (default true).
+```bash
+# Full form with nested children
+bun model save method '{"entity":"Room","name":"rename","args":[{"name":"name","type":"string"}],"publishes":["name"]}'
+
+# Method with permission inline
+bun model save method '{"entity":"Room","name":"deleteRoom","args":[],"permissions":["@creator_id"]}'
+
+# No auth required (no user_id prepended)
+bun model save method '{"entity":"Account","name":"register","args":[{"name":"name","type":"string"},{"name":"email","type":"string"}],"auth_required":false}'
+```
+
+### publish
+Natural key: `method` (Entity.name) + `property`.
+```bash
+bun model save publish '{"method":"Room.rename","property":"name"}'
+```
+
+### notification
+Natural key: `method` + `channel`.
+```bash
+bun model save notification '{"method":"Room.invite","channel":"room-invite","recipients":"invitee_id"}'
+```
+
+### permission
+Natural key: `method` + `path`.
+```bash
+bun model save permission '{"method":"Room.rename","path":"@room_id->acts_for[org_id=$]{active}.user_id"}'
+```
+
+### checklist
+Natural key: `name`. Children: `checks`.
+```bash
+bun model save checklist '{"name":"Room Access","checks":[{"actor":"member","method":"Room.rename"},{"actor":"outsider","method":"Room.rename","denied":true}]}'
+```
+
+### check
+Natural key: `checklist` + `actor` + `method`. Use `denied: true` or `action: "denied"` for negative tests. The `confirmed` field is a bitmask tracking test status: `1` = API tested (A), `2` = UX tested (U), `3` = both. Children: `depends_on` (by natural key: `checklist` + `actor` + `method`).
+```bash
+bun model save check '{"checklist":"Room Access","actor":"outsider","method":"Room.rename","denied":true}'
+
+# Mark API tested
+bun model save check '{"checklist":"Room Access","actor":"member","method":"Room.rename","confirmed":1}'
+
+# Mark UX tested
+bun model save check '{"checklist":"Room Access","actor":"member","method":"Room.rename","confirmed":2}'
+
+# Mark both API + UX tested
+bun model save check '{"checklist":"Room Access","actor":"member","method":"Room.rename","confirmed":3}'
+
+# Add dependency by natural key (outsider check runs after member check)
+bun model save check '{"checklist":"Room Access","actor":"outsider","method":"Room.rename","depends_on":[{"checklist":"Room Access","actor":"member","method":"Room.rename"}]}'
+```
+
+### metadata
+Natural key: `key`.
+```bash
+bun model save metadata '{"key":"theme","value":"Dark navy palette"}'
+bun model save metadata '{"key":"name","value":"My Chat App"}'
+```
+
+### task
+Natural key: `name`. Status: `pending` (default), `in_progress`, `done`, `blocked`. Children: `depends_on` (by task name).
+```bash
+bun model save task '{"name":"schema","description":"Create database tables","status":"done"}'
+bun model save task '{"name":"auth","description":"Add JWT middleware","status":"in_progress"}'
+bun model save task '{"name":"publish-flow","description":"Post lifecycle","status":"pending","depends_on":[{"name":"auth"}]}'
+bun model save task '{"name":"tests","status":"blocked","depends_on":[{"name":"auth"},{"name":"publish-flow"}]}'
+```
+
+### memory
+Natural key: `tag` + `content`. Use tags to categorise: architecture, decision, convention, todo, etc.
+```bash
+bun model save memory '{"tag":"architecture","content":"PostFeed uses cursor-based pagination"}'
+bun model save memory '{"tag":"decision","content":"Tags use slugs for URL-safe identifiers"}'
+```
+
+### flag
+Natural key: `name`. Status: `pass`, `fail`, `unknown` (default). Optional `cmd` for automated checks.
+```bash
+bun model save flag '{"name":"db-migrations","status":"pass"}'
+bun model save flag '{"name":"api-tests","status":"fail"}'
+bun model save flag '{"name":"lint","cmd":"bun run lint","status":"unknown"}'
+```
+
+## Delete
+
+Delete by natural key. Provide only the key fields. Cascading deletes follow foreign key constraints.
 
 ```bash
-# First save creates the entity
-bun model save entity '{"name":"Room"}'
-
-# Second save with the same natural key (name) adds/updates fields only
-bun model save entity '{"name":"Room","fields":[{"name":"created_at","type":"string"}]}'
+bun model delete field '{"entity":"Room","name":"capacity"}'
+bun model delete relation '{"from":"Room","to":"Message","label":"messages"}'
+bun model delete entity '{"name":"Room"}'
+bun model delete metadata '{"key":"theme"}'
 ```
 
 ## Detailed Examples
 
-### Stories
+### Stories with Links
 
 ```bash
-bun model save story '{"actor":"visitor","action":"browse available rooms"}'
-bun model save story '{"actor":"member","action":"send a message to a room"}'
-bun model save story '{"actor":"creator","action":"delete a room"}'
+bun model save story '{"actor":"visitor","action":"browse available rooms","links":[{"type":"document","name":"RoomList"}]}'
+bun model save story '{"actor":"member","action":"send a message to a room","links":[{"type":"document","name":"RoomDoc"},{"type":"method","name":"Room.sendMessage"}]}'
 ```
 
-### Entities and Fields
+### Entity with Fields Inline
 
-Every entity needs an `id: number` field. Foreign keys use `_id` suffix. Fields can be inline or saved separately.
+Every entity needs an `id: number` field. Foreign keys use `_id` suffix.
 
 ```bash
-# Inline — entity with fields in one command
 bun model save entity '{"name":"Room","fields":[{"name":"id","type":"number"},{"name":"name","type":"string"},{"name":"created_by","type":"number"},{"name":"created_at","type":"string"}]}'
+```
 
-# Separate — add a field to an existing entity
-bun model save field '{"entity":"Room","name":"description","type":"string"}'
+Or add fields individually:
+
+```bash
+bun model save entity '{"name":"Room"}'
+bun model save field '{"entity":"Room","name":"id","type":"number"}'
+bun model save field '{"entity":"Room","name":"name","type":"string"}'
 ```
 
 ### Relations
 
 ```bash
-# has-many (cardinality "*", the default)
-bun model save relation '{"from":"Room","to":"Message","label":"messages"}'
+# has-many (cardinality *)
+bun model save relation '{"from":"Room","to":"Message","label":"messages","cardinality":"*"}'
 
-# belongs-to (cardinality "1")
+# belongs-to (cardinality 1)
 bun model save relation '{"from":"Message","to":"Account","label":"sender","cardinality":"1"}'
 ```
 
-### Documents
+### Documents with Expansions Inline
 
 Each document becomes a postgres doc function that the client subscribes to with `openDoc(fn, id)`.
 
 ```bash
-# Single entity document — openDoc("room_doc", roomId)
-bun model save document '{"name":"RoomDoc","entity":"Room"}'
+# Document with expansions inline
+bun model save document '{"name":"RoomDoc","entity":"Room","expansions":[{"name":"messages","entity":"Message","foreign_key":"room_id"}]}'
 
-# Collection document with public access — openDoc("room_list", 0)
+# Collection document with public access
 bun model save document '{"name":"RoomList","entity":"Room","collection":true,"public":true}'
-
-# Document with description and cursor pagination
-bun model save document '{"name":"MessageFeed","entity":"Message","fetch":"cursor","description":"Paginated message history"}'
 ```
 
-### Expansions
+### Expansion Types
 
 Three expansion types:
 
 - **has-many** (default): loads all child rows via `jsonb_agg(...)` in the doc function
 - **belongs-to** (`belongs_to: true`): loads a single parent row via `jsonb_build_object(...)` join
-- **shallow** (`shallow: true`): loads child rows (fields only) but does NOT recurse into nested expansions. Use for navigation references — the client gets enough to render a list and can open the full document on demand.
+- **shallow** (`shallow: true`): loads child rows (fields only) but does NOT recurse into nested expansions. Use for navigation references.
 
-```bash
-# has-many: load messages for a room
-bun model save expansion '{"document":"RoomDoc","name":"messages","entity":"Message","foreign_key":"room_id"}'
-
-# belongs-to nested under messages: load sender of each message
-bun model save expansion '{"document":"RoomDoc","name":"sender","entity":"Account","foreign_key":"sender_id","belongs_to":true,"parent":"messages"}'
-
-# shallow: list occasions at a venue without loading their full tree
-bun model save expansion '{"document":"VenueDoc","name":"occasions","entity":"Occasion","foreign_key":"venue_id","shallow":true}'
-```
-
-Inline expansions on a document:
-
-```bash
-bun model save document '{"name":"RoomDoc","entity":"Room","expansions":[{"name":"messages","entity":"Message","foreign_key":"room_id","expansions":[{"name":"sender","entity":"Account","foreign_key":"sender_id","belongs_to":true}]}]}'
-```
-
-### Methods
+### Methods with Publish Inline
 
 Args are a JSON array of `{name, type}` objects. Each method becomes a postgres function where the server prepends `p_user_id` as the first argument.
 
 ```bash
-bun model save method '{"entity":"Room","name":"sendMessage","args":[{"name":"body","type":"string"}],"return_type":"{id:number}"}'
-bun model save method '{"entity":"Room","name":"join","args":[],"return_type":"boolean"}'
-bun model save method '{"entity":"Room","name":"deleteRoom","args":[]}'
-bun model save method '{"entity":"Room","name":"search","args":[{"name":"query","type":"string"}],"return_type":"{ids:number[]}","auth_required":false}'
-```
+# Method with publishes inline (string shorthand)
+bun model save method '{"entity":"Room","name":"rename","args":[{"name":"name","type":"string"}],"publishes":["name"]}'
 
-Inline with publishes, permissions, and notifications:
-
-```bash
-bun model save method '{"entity":"Room","name":"rename","args":[{"name":"name","type":"string"}],"publishes":["name"],"permissions":["@created_by"]}'
-```
-
-### Publish
-
-Publish declares which fields a method changes. In Simple, these determine the data included in the `pg_notify` payload that fans out to clients with the document open.
-
-```bash
-bun model save publish '{"method":"Room.rename","property":"name"}'
-```
-
-String shorthand when inline on a method: `"publishes": ["name", "status"]`
-
-### Notifications
-
-Cross-document alerts triggered by a method.
-
-```bash
-bun model save notification '{"method":"Room.sendMessage","channel":"new_message","recipients":"@room_id->room_members.user_id","payload":"{room_id, body}"}'
+# Method with permissions inline
+bun model save method '{"entity":"Room","name":"deleteRoom","args":[],"return_type":"boolean","permissions":["@creator_id"]}'
 ```
 
 ### Permissions
 
-Permission paths use fkey path syntax to express who can call a method. The path resolves to user IDs — if the authenticated user is in the set, access is granted. In Simple, these become SQL permission checks in the mutation function.
+Permission paths use fkey path syntax to express who can call a method.
 
 ```bash
-# Direct ownership — entity's user_id column
+# Direct ownership
 bun model save permission '{"method":"User.updateProfile","path":"@user_id","description":"Only the user themselves"}'
 
-# Organisation membership — via acts_for join
+# Organisation membership
 bun model save permission '{"method":"Organisation.createVenue","path":"@id->acts_for[org_id=$]{active}.user_id","description":"Active org member"}'
 
-# Multi-hop — traverse through intermediate entity
-bun model save permission '{"method":"Site.updateSpec","path":"@venue_id->venues.owner_id->acts_for[org_id=$]{active}.user_id","description":"Active member of venue'\''s org"}'
+# Multi-hop
+bun model save permission '{"method":"Site.updateSpec","path":"@venue_id->venues.owner_id->acts_for[org_id=$]{active}.user_id","description":"Active member of venue org"}'
 
-# Role-restricted — only admins
-bun model save permission '{"method":"Organisation.delete","path":"@id->acts_for[org_id=$,role='\''admin'\'']{active}.user_id","description":"Org admin only"}'
+# Role-restricted
+bun model save permission '{"method":"Organisation.delete","path":"@id->acts_for[org_id=$,role='"'"'admin'"'"']{active}.user_id","description":"Org admin only"}'
 ```
-
-String shorthand when inline on a method: `"permissions": ["@user_id"]`
 
 **Path syntax:** `@field->table[filter]{temporal}.target_field`
 - `@field` — start from a column on the entity
@@ -173,41 +264,21 @@ String shorthand when inline on a method: `"permissions": ["@user_id"]`
 
 Multiple paths on the same method use **OR logic** — any matching path grants access.
 
-### Story Links
-
-Connect stories to the artifacts they produce. Inline on story save, target types: `entity`, `document`, `method`, `notification`.
-
-```bash
-# Inline on story
-bun model save story '{"actor":"member","action":"send a message","links":[{"type":"document","name":"RoomDoc"},{"type":"method","name":"Room.sendMessage"}]}'
-```
-
-### Metadata
-
-Key-value store for project settings like theme, app name, etc.
-
-```bash
-bun model save metadata '{"key":"theme","value":"Dark navy palette with amber accents"}'
-bun model save metadata '{"key":"name","value":"My Chat App"}'
-bun model list metadata
-bun model get metadata theme
-bun model delete metadata '{"key":"name"}'
-```
-
 ### Viewing the Model
 
 ```bash
 # List everything
 bun model list
+
+# List by schema type
 bun model list entity
 bun model list story
 bun model list document
 bun model list checklist
 bun model list method
-bun model list relation
 bun model list metadata
 
-# Get detail as JSON
+# Get a single item as JSON
 bun model get entity Room
 bun model get document RoomDoc
 
@@ -219,41 +290,23 @@ bun model export > spec.md
 # Open http://localhost:8080
 ```
 
-### Deleting
-
-Delete by natural key:
-
-```bash
-bun model delete entity '{"name":"Room"}'
-bun model delete field '{"entity":"Room","name":"description"}'
-bun model delete relation '{"from":"Room","to":"Message","label":"messages"}'
-bun model delete document '{"name":"RoomDoc"}'
-bun model delete expansion '{"document":"RoomDoc","name":"messages"}'
-bun model delete method '{"entity":"Room","name":"rename"}'
-bun model delete publish '{"method":"Room.rename","property":"name"}'
-bun model delete story '{"actor":"visitor","action":"browse available rooms"}'
-bun model delete checklist '{"name":"Access"}'
-bun model delete metadata '{"key":"theme"}'
-```
-
-Cascading: deleting an entity removes its fields, methods, publishes, permissions, notifications, and story links. Deleting a document removes its expansions.
-
 ### Batch Operations
 
-Pipe JSONL to `bun model batch` to run many save/delete operations in one call. Each line is a JSON array: `["save", "schema", {...}]` or `["delete", "schema", {...}]`.
+Pipe JSONL to `bun model batch` to run many commands in one call. Each line is a JSON array: `["save", "schema", {...}]` or `["delete", "schema", {...}]`.
 
 ```bash
 cat <<'EOF' | bun model batch
-["save","entity",{"name":"Room","fields":[{"name":"id","type":"number"},{"name":"name","type":"string"}]}]
-["save","relation",{"from":"Room","to":"Message","label":"messages"}]
+["save","entity",{"name":"Room"}]
+["save","field",{"entity":"Room","name":"id","type":"number"}]
+["save","field",{"entity":"Room","name":"name","type":"string"}]
+["save","relation",{"from":"Room","to":"Message","label":"messages","cardinality":"*"}]
 ["save","method",{"entity":"Room","name":"rename","args":[{"name":"name","type":"string"}],"publishes":["name"]}]
-["save","story",{"actor":"member","action":"rename a room","links":[{"type":"method","name":"Room.rename"}]}]
 EOF
 ```
 
 Output:
 ```
-Batch: 4 ok, 0 failed, 4 total
+Batch: 5 ok, 0 failed, 5 total
 ```
 
 Errors on individual lines are caught and reported without stopping the batch. **Prefer individual commands** over batch — run each `bun model` call separately so errors are caught immediately. Only use batch for large bulk imports where you've already verified the syntax.
@@ -292,15 +345,6 @@ documents:
 
 Plural keys (e.g. `entities`, `stories`) are automatically mapped to singular schema names. All items are saved in a single transaction — if any item fails, the entire import is rolled back.
 
-### Doctor
-
-Report or fix orphaned references (story links, checks, check deps pointing to deleted items).
-
-```bash
-bun model doctor           # report only
-bun model doctor --fix     # remove orphaned rows
-```
-
 ## Checklists
 
 Checklists verify that **permission paths work** — that the SQL permission checks in mutation functions enforce who can do what. Each check is a method call by a specific actor. CAN checks prove the right actor succeeds. DENIED checks prove the wrong actor is blocked.
@@ -314,38 +358,42 @@ Checklists make this testable. Each DENIED check asserts that an actor **cannot*
 ### Creating checks
 
 ```bash
-# Create a checklist
-bun model save checklist '{"name":"Venue Setup","description":"Venue owner creates and manages venue"}'
+# Create a checklist with checks inline
+bun model save checklist '{"name":"Venue Setup","description":"Venue owner creates and manages venue","checks":[{"actor":"venue_owner","method":"Venue.addArea","description":"Add an area to the venue"},{"actor":"sponsor","method":"Venue.addArea","description":"Sponsor cannot add area","denied":true}]}'
 
-# CAN check — correct actor succeeds
-bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","description":"Add an area to the venue"}'
-
-# DENIED check — wrong actor is blocked by permission check
+# Or add checks individually
+bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","description":"Add an area"}'
 bun model save check '{"checklist":"Venue Setup","actor":"sponsor","method":"Venue.addArea","description":"Sponsor cannot add area","denied":true}'
 
-# Alternative: use action field instead of denied boolean
-bun model save check '{"checklist":"Venue Setup","actor":"sponsor","method":"Venue.addArea","description":"Sponsor cannot add area","action":"denied"}'
-
-# Dependency by ID
-bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.removeArea","description":"Remove an area","depends_on":[{"depends_on_id":1}]}'
-
-# Dependency by natural key (checklist + actor + method) — no need to know the ID
-bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.removeArea","description":"Remove an area","depends_on":[{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea"}]}'
+# Add dependency — sponsor check runs after venue_owner check
+bun model save check '{"checklist":"Venue Setup","actor":"sponsor","method":"Venue.addArea","depends_on":[{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea"}]}'
 ```
 
-Inline on checklist:
+### Tracking test status
+
+Each check has a `confirmed` bitmask that tracks whether it has been verified:
+
+| Value | Meaning |
+|-------|---------|
+| `0`   | Not tested (default) |
+| `1`   | **A** — API tested |
+| `2`   | **U** — UX tested |
+| `3`   | **A + U** — Both tested (fully done) |
+
+Update the status by saving the check with `confirmed`:
 
 ```bash
-bun model save checklist '{"name":"Venue Setup","checks":[{"actor":"venue_owner","method":"Venue.addArea","description":"Add an area"},{"actor":"sponsor","method":"Venue.addArea","description":"Sponsor blocked","denied":true}]}'
+# Mark API tested
+bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","confirmed":1}'
+
+# Mark both API + UX tested
+bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","confirmed":3}'
+
+# Reset to untested
+bun model save check '{"checklist":"Venue Setup","actor":"venue_owner","method":"Venue.addArea","confirmed":0}'
 ```
 
-### Listing checks
-
-```bash
-bun model list checklist
-```
-
-Shows `[A.]` api confirmed, `[.U]` ux confirmed, `[AU]` both confirmed.
+The site displays A and U badges on each check, and shows progress counts per checklist.
 
 ## Change Targets
 

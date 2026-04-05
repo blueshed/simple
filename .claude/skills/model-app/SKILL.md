@@ -11,9 +11,8 @@ Decompose application requirements into [Simple](https://github.com/blueshed/sim
 > `bun model` resolves to `docker compose exec easy bun model` via the `model` script in package.json — it runs inside the Easy container.
 
 **Important**:
-- The CLI uses **8 commands** (`save`, `delete`, `list`, `get`, `export`, `doctor`, `batch`, `import`) operating on **13 schemas**. All data is passed as **JSON objects**.
+- All mutations use **JSON objects** — `bun model save <schema> '<json>'`. Use the exact syntax from `reference.md`.
 - **Run commands individually**, not in batch. Each command should be a separate `bun model` call so you can see errors immediately and fix them before proceeding. Only use `bun model batch` for large bulk imports where you've already verified the syntax.
-- Save uses **coalescing upsert** by natural key — only provided fields are updated, missing fields are left unchanged. This means you can update a single field without re-specifying everything.
 
 ## Before you start
 
@@ -35,14 +34,6 @@ Then try again.
 
 Do not proceed with modeling until both containers are running.
 
-Once containers are confirmed running, fetch the latest CLI documentation:
-
-```bash
-curl -s http://localhost:8080/api/ai
-```
-
-This returns the authoritative modeling guide and CLI reference from the Easy container. Read its output carefully before proceeding — it contains the full schema reference, examples, and decomposition workflow.
-
 ## What is Simple?
 
 Simple is a minimal full-stack pattern: **postgres owns everything, the server relays, the client merges**. Auth, business logic, and permissions all live in SQL. The server is a thin WebSocket relay that prepends `user_id` to every call. The client opens documents, receives live updates via `pg_notify`, and merges deltas into reactive signals.
@@ -58,7 +49,6 @@ Created with `bun create blueshed/simple <app-name>`.
 | **Expansion** | Related entity loaded within a document (has-many, belongs-to, nestable) | SQL subqueries/joins in the doc function: `jsonb_agg(...)` for has-many, `jsonb_build_object(...)` for belongs-to |
 | **Method** | A mutation the user can perform on an entity | Postgres function: `save_room(p_user_id, ...)` or `remove_room(p_user_id, ...)` |
 | **Publish** | Fields changed by a method — tells `/implement` what the mutation's `pg_notify` payload should carry | Method publishes `name` → save function notifies with the updated name field |
-| **Notification** | Cross-document alert triggered by a method — channel, recipients, payload | `pg_notify` to a named channel with recipient user IDs |
 | **Auth** | Token-based WebSocket auth, public vs protected documents | Pre-auth via `POST /auth` (login/register), then `WS /ws?token=...` for everything else |
 | **Story** | User requirement that decomposes into the above | "As a member, I can send a message" |
 
@@ -85,43 +75,9 @@ Always work top-down in this order:
 5. **Expansions** — which related entities load with each document?
 6. **Methods** — what mutations can users perform? Each becomes a postgres function
 7. **Publish** — which fields does each method change? Determines the `pg_notify` payload
-8. **Story links** — connect each story to its artifacts
+8. **Story links** — connect each story to its artifacts (inline with story save)
 9. **Checklists** — CAN/DENIED checks that verify permission enforcement (see guidance below)
 10. **Export** — `bun model export` to generate the spec
-
-## Schemas
-
-The CLI operates on 13 schema types. Each has a **natural key** used for upsert — saving the same natural key again updates the existing record.
-
-| Schema | Natural Key | Purpose |
-|---|---|---|
-| `entity` | name | Database tables |
-| `field` | entity, name | Entity columns |
-| `relation` | from, to, label | Relationships between entities |
-| `story` | actor, action | User stories |
-| `document` | name | Subscription units (client entry points) |
-| `expansion` | document, name | Children loaded with a document |
-| `method` | entity, name | RMI handlers on entities |
-| `publish` | method, property | Fields a method changes |
-| `notification` | method, channel | Cross-document alerts |
-| `permission` | method, path | FKEY path access controls |
-| `checklist` | name | Sequences of verifiable steps |
-| `check` | checklist, actor, method | Individual test steps |
-| `metadata` | key | Key-value project settings |
-
-## Nested Children
-
-Schemas that support inline children via save:
-
-- **entity** → `fields` (field[]), `methods` (method[])
-- **method** → `publishes` (string[] or publish[]), `permissions` (string[] or permission[]), `notifications` (notification[])
-- **document** → `expansions` (expansion[])
-- **expansion** → `expansions` (expansion[]) — for nesting
-- **story** → `links` (story_link[])
-- **checklist** → `checks` (check[])
-- **check** → `depends_on` (check_dep[])
-
-String shorthand: `publishes` and `permissions` accept plain strings that expand to `{"property": "name"}` and `{"path": "@user_id"}` respectively.
 
 ## Metadata
 
@@ -130,8 +86,8 @@ The model database has a key-value metadata store for application-level informat
 ```bash
 bun model save metadata '{"key":"theme","value":"60s flower power — warm oranges, earthy browns, groovy rounded shapes"}'
 bun model save metadata '{"key":"name","value":"My Chat App"}'
-bun model list metadata          # list all
-bun model delete metadata '{"key":"name"}'  # remove a key
+bun model list metadata              # list all
+bun model delete metadata '{"key":"name"}'   # remove a key
 ```
 
 All metadata is included in `export` output as a `## Metadata` section. The `/implement` skill reads the `theme` value (if present) to guide CSS generation. The Easy website displays all metadata on the Stories page.
@@ -229,7 +185,7 @@ Methods already capture permissions and publish as the **single source of truth*
 **DO use checklists for:**
 - **Denied paths** — proving someone *can't* do something (e.g. "user B cannot edit user A's post")
 - **Document-level behaviour** — what appears/disappears from collection queries after an action (e.g. "published post appears in PostFeed")
-- **Sequenced flows** — ordered multi-step scenarios using `depends_on` dependencies
+- **Sequenced flows** — ordered multi-step scenarios using dependencies
 - **Cross-cutting concerns** — behaviour that spans multiple methods or documents
 
 **AVOID in checklists:**
@@ -238,4 +194,4 @@ Methods already capture permissions and publish as the **single source of truth*
 
 When in doubt, ask: "Is this already expressed on a method?" If yes, don't add a checklist check for it.
 
-For full CLI reference and detailed examples, run `curl -s http://localhost:8080/api/ai` (already fetched in the "Before you start" step above).
+For full CLI reference and detailed examples, see [reference.md](reference.md).

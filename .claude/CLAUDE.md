@@ -70,6 +70,7 @@ Read these for detailed implementation guidance:
 
 - `/model-app` — design your domain model with the [Easy](https://github.com/blueshed/easy) CLI
 - `/implement` — read `spec.md` and build the full app: schema, doc functions, mutations, components
+- `/agentic` — manage tasks, memories, and flags in the model database
 
 ### Design-to-build workflow
 

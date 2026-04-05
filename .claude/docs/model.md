@@ -17,7 +17,7 @@ bun model ...  →  bun model export > spec.md  →  /implement
 
 ## CLI Quick Reference
 
-The CLI has **8 commands** operating on **13 schemas**. All data is passed as JSON objects. Save uses coalescing upsert by natural key.
+All data is passed as JSON objects. Save uses coalescing upsert by natural key. The 16 schemas are: entity, field, relation, story, document, expansion, method, publish, notification, permission, checklist, check, metadata, task, memory, flag.
 
 ```
 bun model save <schema> '<json>'       Upsert by natural key
@@ -28,6 +28,7 @@ bun model export                       Markdown spec to stdout
 bun model doctor [--fix]               Report/repair orphans
 bun model batch                        JSONL from stdin
 bun model import <file.yml|json>       Import YAML or JSON file
+bun model skills [target-dir]          Copy skills to .claude/skills
 ```
 
 ### Stories
@@ -276,3 +277,38 @@ bun model save entity '{"name":"Account","fields":[{"name":"id","type":"number"}
 ```
 
 Each becomes a `pg_notify` target in the mutation function. The model site shows these on entity pages and the reverse (**Changed by**) on document pages.
+
+## Agentic Context — Tasks, Memories & Flags
+
+Three schemas for tracking implementation state alongside the domain model. See the `/agentic` skill for full details.
+
+### Tasks
+
+Dependency DAG of implementation work. Status: `pending`, `in_progress`, `done`, `blocked`.
+
+```bash
+bun model save task '{"name":"auth","description":"Add JWT middleware","status":"in_progress"}'
+bun model save task '{"name":"api-tests","status":"pending","depends_on":[{"name":"auth"}]}'
+bun model list task
+```
+
+### Memories
+
+Persistent context stored as tag+content pairs.
+
+```bash
+bun model save memory '{"tag":"architecture","content":"PostFeed uses cursor-based pagination"}'
+bun model list memory
+```
+
+### Flags
+
+Named status indicators. Status: `pass`, `fail`, `unknown`.
+
+```bash
+bun model save flag '{"name":"db-migrations","status":"pass"}'
+bun model save flag '{"name":"api-tests","cmd":"bun test","status":"fail"}'
+bun model list flag
+```
+
+The site shows tasks as a DAG at `/#/graph`, memories at `/#/memories`, and flags in the top-right of the Tasks view.
